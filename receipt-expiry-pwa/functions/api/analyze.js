@@ -242,8 +242,14 @@ export async function onRequestPost(context) {
   if (!apiKey) {
     return errorResponse(500, 'API_KEY_NOT_CONFIGURED', '解析用のAPIキーが未設定です。設定画面からご自身のGemini APIキーを登録するか、運用者に共通キーの設定を依頼してください。');
   }
-  if (!customApiKey && await isRateLimited(request, env)) {
-    return errorResponse(429, 'RATE_LIMIT_EXCEEDED', '解析リクエストの上限に達しました。しばらく待つか、設定画面からご自身のAPIキーをご利用ください。');
+  if (!customApiKey) {
+    try {
+      if (await isRateLimited(request, env)) {
+        return errorResponse(429, 'RATE_LIMIT_EXCEEDED', '解析リクエストの上限に達しました。しばらく待つか、設定画面からご自身のAPIキーをご利用ください。');
+      }
+    } catch {
+      return errorResponse(503, 'RATE_LIMIT_UNAVAILABLE', '共通キーの利用制限を確認できません。しばらくして再度お試しください。');
+    }
   }
 
   const clientDate = isValidDateString(body.clientDate) ? body.clientDate : todayString();
