@@ -144,6 +144,18 @@
       </section>
 
       <section class="settings-section">
+        <h3>在庫のバックアップ</h3>
+        <p class="hint">在庫データをJSONファイルに書き出せます。読み込み時はIDが同じ食材をファイルの内容で上書きし、それ以外の食材はそのまま残します。</p>
+        <div class="inline-actions">
+          <button id="export-backup-btn" class="btn is-primary" type="button">JSONを書き出す</button>
+          <button id="import-backup-btn" class="btn is-ghost" type="button">JSONを読み込む</button>
+        </div>
+        <input id="backup-input" type="file" accept="application/json,.json" hidden>
+        <p id="backup-status" class="hint" aria-live="polite"></p>
+      </section>
+
+
+      <section class="settings-section">
         <h3>自分のGemini APIキーを使う（BYOK）</h3>
         <p class="hint">キーを登録すると共有の利用制限なしで解析できます。キーはこの端末の localStorage にのみ保存され、サーバーには保存されません。</p>
         <label class="field">Gemini API キー

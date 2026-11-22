@@ -4,7 +4,7 @@
 
 ## 構成
 
-- `public/` — PWA の静的ファイル（HTML/CSS/JS、Service Worker、アイコン）
+- `public/` — PWA の静的ファイル（HTML/CSS/JS、Service Worker、アイコン）。`js/backup.js` が在庫の JSON バックアップを処理
 - `functions/api/analyze.js` — Cloudflare Pages Functions。Gemini API へのプロキシと応答検証
 - `oci/` — OCI VM 上で動かす Node サーバーと Nginx の設定
 - `deploy-cloudflare.sh` — Cloudflare Pages への Direct Upload スクリプト
