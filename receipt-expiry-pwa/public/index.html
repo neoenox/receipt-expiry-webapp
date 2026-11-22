@@ -205,6 +205,10 @@
           <button id="export-backup-btn" class="btn is-primary" type="button">JSONを書き出す</button>
           <button id="import-backup-btn" class="btn is-ghost" type="button">JSONを読み込む</button>
         </div>
+
+        <label class="field checkbox-field">
+          <input id="backup-replace" type="checkbox"> 既存データを削除してバックアップ内容で置き換える
+        </label>
         <input id="backup-input" type="file" accept="application/json,.json" hidden>
         <p id="backup-status" class="hint" aria-live="polite"></p>
       </section>

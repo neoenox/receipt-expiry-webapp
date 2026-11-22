@@ -1,0 +1,248 @@
+import { getAllItems, listConsumption, listExpiryHints, importItems, importConsumption, importExpiryHints, clearAllData } from './db.js';
+import { serializeBackup, parseBackup } from './backup.js';
+import { buildHintMap } from './learning.js';
+import { daysUntilDate } from './dates.js';
+
+const BYOK_STORAGE_KEY = 'receipt-expiry-gemini-key';
+const NOTIFY_STORAGE_KEY = 'receipt-expiry-notify';
+
+export function createSettings({ ui, state, byId, showToast, openModal, todayISO, isValidDate, refreshItems, refreshHistorySummary, refreshQueueStatus }) {
+  function getApiKey() {
+    try {
+      return localStorage.getItem(BYOK_STORAGE_KEY) || '';
+    } catch {
+      return '';
+    }
+  }
+
+  function isNotifyEnabled() {
+    try {
+      return localStorage.getItem(NOTIFY_STORAGE_KEY) === '1';
+    } catch {
+      return false;
+    }
+  }
+
+  function refreshNotifyStatus() {
+    if (!('Notification' in window) || !('serviceWorker' in navigator) || !('PushManager' in window)) {
+      ui.notifyStatus.textContent = 'このブラウザはプッシュ通知に対応していません。';
+      return;
+    }
+    ui.notifyStatus.textContent = isNotifyEnabled()
+      ? `通知を有効にしています（${Notification.permission}）。`
+      : '通知は無効です。';
+  }
+
+  function refreshApiKeyStatus() {
+    ui.apiKeyInput.value = getApiKey();
+    ui.apiKeyStatus.textContent = getApiKey()
+      ? 'この端末にAPIキーが保存されています（解析時に自動で使用されます）。'
+      : '未設定の場合は、アプリ側の共通キーで解析します。';
+  }
+
+  function openSettings() {
+    refreshApiKeyStatus();
+    ui.backupStatus.textContent = '';
+    ui.backupReplace.checked = false;
+    refreshNotifyStatus();
+    refreshQueueStatus();
+    refreshHistorySummary();
+    openModal(ui.settingsModal);
+  }
+
+  async function saveApiKey() {
+    if (state.savingKey) return;
+    const key = ui.apiKeyInput.value.trim();
+    if (!key) {
+      ui.apiKeyStatus.textContent = 'APIキーを入力してください。';
+      return;
+    }
+    state.savingKey = true;
+    const button = byId('save-api-key');
+    button.disabled = true;
+    ui.apiKeyStatus.textContent = 'APIキーを検証しています…';
+    try {
+      const response = await fetch('/api/validate-key', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ apiKey: key }),
+      });
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({}));
+        ui.apiKeyStatus.textContent = data?.error?.code === 'INVALID_KEY'
+          ? 'APIキーが無効です。入力内容を確認してください。'
+          : 'APIキーを検証できませんでした。しばらくして再度お試しください。';
+        return;
+      }
+      try {
+        localStorage.setItem(BYOK_STORAGE_KEY, key);
+        ui.apiKeyStatus.textContent = 'APIキーを検証して保存しました。';
+      } catch {
+        ui.apiKeyStatus.textContent = 'このブラウザではキーを保存できません。';
+      }
+    } catch {
+      ui.apiKeyStatus.textContent = 'APIキーを検証できませんでした。通信環境を確認してください。';
+    } finally {
+      state.savingKey = false;
+      button.disabled = false;
+    }
+  }
+
+  function clearApiKey() {
+    try {
+      localStorage.removeItem(BYOK_STORAGE_KEY);
+      ui.apiKeyInput.value = '';
+      ui.apiKeyStatus.textContent = 'APIキーを削除しました。共通キーに戻ります。';
+    } catch {
+      ui.apiKeyStatus.textContent = 'このブラウザではキーを削除できません。';
+    }
+  }
+
+  function urlBase64ToUint8Array(base64String) {
+    const padding = '='.repeat((4 - (base64String.length % 4)) % 4);
+    const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
+    const raw = atob(base64);
+    return Uint8Array.from(raw, (char) => char.charCodeAt(0));
+  }
+
+  async function enableNotifications() {
+    try {
+      if (!('Notification' in window) || !('serviceWorker' in navigator) || !('PushManager' in window)) {
+        ui.notifyStatus.textContent = 'このブラウザはプッシュ通知に対応していません。';
+        return;
+      }
+      const permission = await Notification.requestPermission();
+      if (permission !== 'granted') {
+        ui.notifyStatus.textContent = '通知が許可されませんでした。ブラウザ設定で許可してください。';
+        return;
+      }
+      const config = await fetch('/api/push/config').then((response) => response.json());
+      if (!config.publicKey) throw new Error('通知の設定を取得できませんでした。');
+      const registration = await navigator.serviceWorker.ready;
+      let subscription = await registration.pushManager.getSubscription();
+      if (!subscription) {
+        subscription = await registration.pushManager.subscribe({
+          userVisibleOnly: true,
+          applicationServerKey: urlBase64ToUint8Array(config.publicKey),
+        });
+      }
+      localStorage.setItem(NOTIFY_STORAGE_KEY, '1');
+      await syncPushReminder();
+      refreshNotifyStatus();
+      showToast('賞味期限の通知を有効にしました。');
+    } catch (error) {
+      ui.notifyStatus.textContent = error.message || '通知を有効にできませんでした。';
+      showToast('通知を有効にできませんでした。');
+    }
+  }
+
+  async function disableNotifications() {
+    try {
+      if ('serviceWorker' in navigator) {
+        const registration = await navigator.serviceWorker.ready;
+        const subscription = await registration.pushManager.getSubscription();
+        if (subscription) {
+          await fetch('/api/push/unsubscribe', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ endpoint: subscription.endpoint }),
+          });
+          await subscription.unsubscribe();
+        }
+      }
+      localStorage.removeItem(NOTIFY_STORAGE_KEY);
+      refreshNotifyStatus();
+      showToast('通知を無効にしました。');
+    } catch (error) {
+      showToast(error.message || '通知を無効にできませんでした。');
+    }
+  }
+
+  async function syncPushReminder() {
+    if (state.syncingPush || !isNotifyEnabled()) return;
+    state.syncingPush = true;
+    try {
+      const registration = await navigator.serviceWorker.ready;
+      const subscription = await registration.pushManager.getSubscription();
+      if (!subscription) return;
+      const dates = state.items
+        .map((item) => item.expiryDate)
+        .filter((date) => isValidDate(date))
+        .sort();
+      await fetch('/api/push/subscribe', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          subscription: subscription.toJSON(),
+          nextExpiry: dates[0] || null,
+          daysUntil: dates[0] ? daysUntilDate(dates[0]) : null,
+        }),
+      });
+    } catch {
+      // 通知の同期失敗は在庫操作を止めない。
+    } finally {
+      state.syncingPush = false;
+    }
+  }
+
+  async function exportBackup() {
+    try {
+      const items = await getAllItems();
+      const history = await listConsumption();
+      const hints = await listExpiryHints();
+      const blob = new Blob([serializeBackup({ items, history, hints })], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `receipt-expiry-backup-${todayISO()}.json`;
+      document.body.append(link);
+      link.click();
+      link.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+      ui.backupStatus.textContent = `在庫${items.length}件・履歴${history.length}件・学習値${hints.length}件を書き出しました。`;
+      showToast('バックアップを書き出しました。');
+    } catch (error) {
+      ui.backupStatus.textContent = error.message || '書き出しに失敗しました。';
+      showToast(error.message || '書き出しに失敗しました。');
+    }
+  }
+
+  async function handleBackupFileSelected(event) {
+    const input = event.currentTarget;
+    const file = input.files?.[0];
+    input.value = '';
+    if (!file) return;
+    try {
+      const data = parseBackup(await file.text());
+      if (ui.backupReplace.checked) {
+        if (!window.confirm('既存の在庫・履歴・学習値・未送信キューを削除し、バックアップ内容で置き換えます。よろしいですか？')) return;
+        await clearAllData();
+      }
+      await importItems(data.items);
+      await importConsumption(data.history);
+      await importExpiryHints(data.hints);
+      state.expiryHints = buildHintMap(await listExpiryHints());
+      await refreshItems();
+      await refreshHistorySummary();
+      ui.backupStatus.textContent = `在庫${data.items.length}件・履歴${data.history.length}件・学習値${data.hints.length}件を読み込みました。`;
+      showToast(`${data.items.length}件の在庫を読み込みました。`);
+    } catch (error) {
+      ui.backupStatus.textContent = error.message || '読み込みに失敗しました。';
+      showToast(error.message || '読み込みに失敗しました。');
+    }
+  }
+
+  function wire() {
+    byId('save-api-key').addEventListener('click', () => void saveApiKey());
+    byId('clear-api-key').addEventListener('click', clearApiKey);
+    ui.exportBackupBtn.addEventListener('click', () => void exportBackup());
+    ui.importBackupBtn.addEventListener('click', () => ui.backupInput.click());
+    ui.backupInput.addEventListener('change', handleBackupFileSelected);
+    ui.notifyEnableBtn.addEventListener('click', () => void enableNotifications());
+    ui.notifyDisableBtn.addEventListener('click', () => void disableNotifications());
+  }
+
+  return {
+    getApiKey, openSettings, syncPushReminder, refreshNotifyStatus, refreshApiKeyStatus, wire,
+  };
+}

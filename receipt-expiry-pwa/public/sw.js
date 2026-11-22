@@ -1,17 +1,21 @@
 const CACHE_PREFIX = 'receipt-expiry-';
-const CACHE_NAME = `${CACHE_PREFIX}v6`;
+const CACHE_NAME = `${CACHE_PREFIX}v8`;
 const STATIC_ASSETS = [
   '/',
   '/index.html',
   '/manifest.json',
   '/css/style.css',
   '/js/app.js',
+  '/js/settings.js',
+  '/js/queueUI.js',
   '/js/db.js',
   '/js/backup.js',
   '/js/queue.js',
   '/js/inventory.js',
   '/js/history.js',
   '/js/learning.js',
+  '/js/imageOptions.js',
+  '/js/dates.js',
   '/js/imageProcessor.js',
   '/js/apiClient.js',
   '/icons/icon-192.png',

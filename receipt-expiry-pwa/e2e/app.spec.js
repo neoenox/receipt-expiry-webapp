@@ -105,3 +105,69 @@ test('offline analysis is queued and retried after reconnection', async ({ page 
 
   await expect(page.locator('#queue-status')).toContainText('未送信の解析はありません');
 });
+
+
+test('BYOK key is validated before it is stored', async ({ page }) => {
+  await page.goto('/');
+  await resetStorage(page);
+  await page.route('**/api/validate-key', (route) => route.fulfill({
+    status: 400,
+    contentType: 'application/json',
+    body: JSON.stringify({ error: { code: 'INVALID_KEY' } }),
+  }));
+  await page.click('#settings-btn');
+  await page.fill('#api-key-input', 'bad-key');
+  await page.click('#save-api-key');
+  await expect(page.locator('#api-key-status')).toContainText('無効です');
+  expect(await page.evaluate(() => localStorage.getItem('receipt-expiry-gemini-key'))).toBeNull();
+
+  await page.unroute('**/api/validate-key');
+  await page.route('**/api/validate-key', (route) => route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify({ ok: true }),
+  }));
+  await page.fill('#api-key-input', 'valid-key');
+  await page.click('#save-api-key');
+  await expect(page.locator('#api-key-status')).toContainText('保存しました');
+  expect(await page.evaluate(() => localStorage.getItem('receipt-expiry-gemini-key'))).toBe('valid-key');
+});
+
+test('dark mode changes the page background', async ({ page }) => {
+  await page.emulateMedia({ colorScheme: 'dark' });
+  await page.goto('/');
+  await resetStorage(page);
+  const background = await page.evaluate(() => getComputedStyle(document.body).backgroundColor);
+  expect(background).not.toBe('rgb(243, 246, 245)');
+});
+
+test('notification opt-in succeeds with a subscribed push manager', async ({ page }) => {
+  await page.addInitScript(() => {
+    Object.defineProperty(Notification, 'permission', { get: () => 'granted' });
+    Notification.requestPermission = async () => 'granted';
+    PushManager.prototype.subscribe = async () => ({
+      endpoint: 'https://example.test/e2e',
+      keys: { p256dh: 'AAA', auth: 'BBB' },
+      toJSON() { return { endpoint: this.endpoint, keys: this.keys }; },
+      unsubscribe: async () => true,
+    });
+    PushManager.prototype.getSubscription = async () => null;
+  });
+  await page.goto('/');
+  await resetStorage(page);
+  await page.route('**/api/push/**', (route) => route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify({ ok: true }),
+  }));
+  await page.route('**/api/push/config', (route) => route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify({
+      publicKey: 'BBH70Vd1epc-FBv8gqa8ZrwgLMcXqJMq4eTHzloq7NW_9oBkqriptpJ100zUK_7oDv9Pb6_qLE64gxPtIJObuFk',
+    }),
+  }));
+  await page.click('#settings-btn');
+  await page.click('#notify-enable-btn');
+  await expect(page.locator('#notify-status')).toContainText('通知を有効にしています');
+});

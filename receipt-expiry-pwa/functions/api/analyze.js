@@ -270,7 +270,7 @@ export async function onRequestPost(context) {
   }
 
   const clientDate = isValidDateString(body.clientDate) ? body.clientDate : todayString();
-  const mimeType = body.mimeType === 'image/png' ? 'image/png' : 'image/jpeg';
+  const mimeType = ['image/png', 'image/webp'].includes(body.mimeType) ? body.mimeType : 'image/jpeg';
 
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), GEMINI_TIMEOUT_MS);

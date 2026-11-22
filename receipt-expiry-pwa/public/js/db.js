@@ -186,3 +186,11 @@ export function importExpiryHints(hints) {
   }, STORE.hints);
 }
 
+
+/** バックアップの置き換え復元前に全ストアを空にする。 */
+export function clearAllData() {
+  return withStore('readwrite', (store) => { store.clear(); }, STORE.items)
+    .then(() => withStore('readwrite', (store) => { store.clear(); }, STORE.queue))
+    .then(() => withStore('readwrite', (store) => { store.clear(); }, STORE.history))
+    .then(() => withStore('readwrite', (store) => { store.clear(); }, STORE.hints));
+}

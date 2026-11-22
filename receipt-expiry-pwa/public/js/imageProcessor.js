@@ -1,6 +1,7 @@
+import { QUALITY_STEPS, MAX_BASE64_CHARS, dataUrlMime, base64FromDataUrl, nextQuality } from './imageOptions.js';
+
 const MAX_SIZE = 1024;
 const MAX_FILE_BYTES = 20 * 1024 * 1024;
-const JPEG_QUALITY = 0.9;
 
 /**
  * レシート画像を長辺1024pxのJPEGへリサイズし、プレフィックスなしのBase64を返す。
@@ -47,11 +48,17 @@ export async function processReceiptImage(file) {
     ctx.fillRect(0, 0, targetWidth, targetHeight);
     ctx.drawImage(source, 0, 0, targetWidth, targetHeight);
 
-    const dataUrl = canvas.toDataURL('image/jpeg', JPEG_QUALITY);
-    const base64 = dataUrl.slice(dataUrl.indexOf(',') + 1);
-    if (!base64) throw new Error('画像の変換に失敗しました。');
+    const webpProbe = canvas.toDataURL('image/webp', QUALITY_STEPS[0]);
+    const mimeType = dataUrlMime(webpProbe) === 'image/webp' ? 'image/webp' : 'image/jpeg';
 
-    return { base64, mimeType: 'image/jpeg' };
+    for (let quality = QUALITY_STEPS[0]; quality !== null; quality = nextQuality(quality)) {
+      const dataUrl = canvas.toDataURL(mimeType, quality);
+      const base64 = base64FromDataUrl(dataUrl);
+      if (base64 && base64.length <= MAX_BASE64_CHARS) {
+        return { base64, mimeType };
+      }
+    }
+    throw new Error('画像データを圧縮できませんでした。別の画像をお試しください。');
   } catch (error) {
     if (error instanceof Error && error.message.startsWith('画像')) throw error;
     throw new Error(describeImageError(error));
