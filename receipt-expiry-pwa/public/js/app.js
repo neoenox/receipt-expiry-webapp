@@ -1,10 +1,11 @@
-import { initDB, addItemsBulk, getAllItems, getAllItemsSorted, importItems, updateItem, deleteItem, enqueueAnalysis, listQueuedAnalyses, updateQueuedAnalysis, deleteQueuedAnalysis, addConsumption, listConsumption, saveExpiryHint, listExpiryHints } from './db.js';
+import { initDB, addItemsBulk, getAllItems, getAllItemsSorted, importItems, updateItem, deleteItem, enqueueAnalysis, listQueuedAnalyses, updateQueuedAnalysis, deleteQueuedAnalysis, addConsumption, listConsumption, importConsumption, saveExpiryHint, listExpiryHints, importExpiryHints } from './db.js';
 import { processReceiptImage } from './imageProcessor.js';
 import { analyzeReceipt, isValidDate } from './apiClient.js';
 import { serializeBackup, parseBackup } from './backup.js';
 import { createQueuedAnalysis, nextAttempt, shouldDiscard } from './queue.js';
 import { createConsumption, summarizeHistory } from './history.js';
 import { createExpiryHint, buildHintMap, normalizeFoodName } from './learning.js';
+import { filterAndSortItems } from './inventory.js';
 
 const STORAGE_LABELS = { fridge: '冷蔵', freezer: '冷凍', pantry: '常温' };
 const BYOK_STORAGE_KEY = 'receipt-expiry-gemini-key';
@@ -15,6 +16,9 @@ const ui = {
   tabs: byId('storage-tabs'),
   list: byId('item-list'),
   itemCount: byId('item-count'),
+
+  searchInput: byId('search-input'),
+  sortSelect: byId('sort-select'),
   emptyState: byId('empty-state'),
   emptyTitle: byId('empty-title'),
   emptyDetail: byId('empty-detail'),
@@ -58,6 +62,9 @@ const ui = {
 const state = {
   items: [],
   filter: 'all',
+
+  search: '',
+  sort: 'expiry',
   editingId: null,
   resultPurchaseDate: null,
   deferredInstallPrompt: null,
@@ -158,9 +165,11 @@ async function refreshItems() {
 }
 
 function renderList() {
-  const visible = state.filter === 'all'
-    ? state.items
-    : state.items.filter((item) => item.storage === state.filter);
+  const visible = filterAndSortItems(state.items, {
+    filter: state.filter,
+    search: state.search,
+    sort: state.sort,
+  });
 
   ui.list.replaceChildren();
   for (const item of visible) {
@@ -578,7 +587,9 @@ function clearApiKey() {
 async function exportBackup() {
   try {
     const items = await getAllItems();
-    const blob = new Blob([serializeBackup(items)], { type: 'application/json' });
+    const history = await listConsumption();
+    const hints = await listExpiryHints();
+    const blob = new Blob([serializeBackup({ items, history, hints })], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
@@ -587,7 +598,7 @@ async function exportBackup() {
     link.click();
     link.remove();
     setTimeout(() => URL.revokeObjectURL(url), 1000);
-    ui.backupStatus.textContent = `${items.length}件を書き出しました。`;
+    ui.backupStatus.textContent = `在庫${items.length}件・履歴${history.length}件・学習値${hints.length}件を書き出しました。`;
     showToast('バックアップを書き出しました。');
   } catch (error) {
     ui.backupStatus.textContent = error.message || '書き出しに失敗しました。';
@@ -601,11 +612,15 @@ async function handleBackupFileSelected(event) {
   input.value = '';
   if (!file) return;
   try {
-    const items = parseBackup(await file.text());
-    await importItems(items);
+    const data = parseBackup(await file.text());
+    await importItems(data.items);
+    await importConsumption(data.history);
+    await importExpiryHints(data.hints);
+    state.expiryHints = buildHintMap(await listExpiryHints());
     await refreshItems();
-    ui.backupStatus.textContent = `${items.length}件を読み込みました。`;
-    showToast(`${items.length}件の在庫を読み込みました。`);
+    await refreshHistorySummary();
+    ui.backupStatus.textContent = `在庫${data.items.length}件・履歴${data.history.length}件・学習値${data.hints.length}件を読み込みました。`;
+    showToast(`${data.items.length}件の在庫を読み込みました。`);
   } catch (error) {
     ui.backupStatus.textContent = error.message || '読み込みに失敗しました。';
     showToast(error.message || '読み込みに失敗しました。');
@@ -696,6 +711,16 @@ function wireEvents() {
   ui.exportBackupBtn.addEventListener('click', () => void exportBackup());
   ui.importBackupBtn.addEventListener('click', () => ui.backupInput.click());
   ui.backupInput.addEventListener('change', handleBackupFileSelected);
+
+  ui.searchInput.addEventListener('input', (event) => {
+    state.search = event.target.value;
+    renderList();
+  });
+  ui.sortSelect.addEventListener('change', (event) => {
+    state.sort = event.target.value;
+    renderList();
+  });
+
 
   ui.tabs.addEventListener('click', (event) => {
     const tab = event.target.closest('.tab');

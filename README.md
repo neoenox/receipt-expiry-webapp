@@ -56,3 +56,12 @@ Cloudflare では `wrangler.toml` の `RATE_LIMIT_KV` バインディング（KV
 - **JSONバックアップ:** 設定画面から在庫をエクスポート/インポート
 
 通知の仕組み: `notify-worker/` に Cron Worker（`web-push`、秘密鍵は Cloudflare Secret）、Pages Functions に `/api/push/*`、KV バインディングは `PUSH_KV` です。
+
+
+最新の追加対応:
+
+- バックアップ v2: 在庫に加えて消費履歴と学習した賞味期限も JSON に含め、復元時は ID / 食材名でマージ
+- 在庫の検索（食材名・メモ）と並び替え（期限 / 名前 / 登録日 / 保存場所）
+- CI が Pages と通知 Worker の両方をデプロイし、Playwright の E2E テストも実行
+- テスト: `node --test tests/*.js` と `npm run test:e2e`
+

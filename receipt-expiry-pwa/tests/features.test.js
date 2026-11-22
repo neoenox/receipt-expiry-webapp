@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { createQueuedAnalysis, nextAttempt, shouldDiscard, MAX_QUEUE_ATTEMPTS } from '../public/js/queue.js';
 import { createConsumption, summarizeHistory } from '../public/js/history.js';
 import { normalizeFoodName, createExpiryHint, buildHintMap } from '../public/js/learning.js';
+import { filterAndSortItems } from '../public/js/inventory.js';
 
 test('queued analysis never stores an API key', () => {
   const job = createQueuedAnalysis({ imageBase64: 'aGVsbG8=', mimeType: 'image/jpeg', clientDate: '2026-11-22' });
@@ -37,4 +38,16 @@ test('expiry hints normalize names and ignore invalid dates', () => {
   const map = buildHintMap([hint, { name: 'bad', expiryDate: 'not-a-date' }]);
   assert.equal(map.get('特濃牛乳'), '2026-12-01');
   assert.equal(map.has('bad'), false);
+});
+
+
+test('inventory search and sort are applied together', () => {
+  const items = [
+    { name: '牛乳', quantity: '1本', storage: 'fridge', expiryDate: '2026-12-10', createdAt: 1 },
+    { name: '食パン', quantity: '1袋', storage: 'pantry', expiryDate: '2026-11-25', createdAt: 2 },
+    { name: '牛乳 低脂肪', quantity: '', storage: 'fridge', expiryDate: '2026-12-01', createdAt: 3 },
+  ];
+  assert.deepEqual(filterAndSortItems(items, { search: '牛乳' }).map((i) => i.name), ['牛乳 低脂肪', '牛乳']);
+  assert.deepEqual(filterAndSortItems(items, { filter: 'fridge', sort: 'createdAt' }).map((i) => i.createdAt), [3, 1]);
+  assert.deepEqual(filterAndSortItems(items, { sort: 'name' }).map((i) => i.name), ['牛乳', '牛乳 低脂肪', '食パン']);
 });

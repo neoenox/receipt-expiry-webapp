@@ -11,14 +11,24 @@ const ITEM = {
   quantity: '1本',
   createdAt: 1795334400000,
 };
+const HISTORY = {
+  id: 'history-1', name: '特濃牛乳', storage: 'fridge', expiryDate: '2026-11-29',
+  quantity: '1本', reason: 'eaten', consumedAt: 1795334500000,
+};
+const HINT = { name: '特濃牛乳', expiryDate: '2026-12-05', updatedAt: 1795334600000 };
 
-test('backup round-trip preserves items and metadata', () => {
-  const json = serializeBackup([ITEM]);
+test('backup round-trip preserves items, history, and hints', () => {
+  const json = serializeBackup({ items: [ITEM], history: [HISTORY], hints: [HINT] });
   const data = JSON.parse(json);
   assert.equal(data.format, 'receipt-expiry-backup');
-  assert.equal(data.version, 1);
+  assert.equal(data.version, 2);
   assert.ok(data.exportedAt);
-  assert.deepEqual(parseBackup(json), [ITEM]);
+  assert.deepEqual(parseBackup(json), { items: [ITEM], history: [HISTORY], hints: [HINT] });
+});
+
+test('legacy item-only backups still parse', () => {
+  const json = serializeBackup([ITEM]);
+  assert.deepEqual(parseBackup(json), { items: [ITEM], history: [], hints: [] });
 });
 
 test('backup strips unknown fields and fills optional fields', () => {
@@ -28,25 +38,28 @@ test('backup strips unknown fields and fills optional fields', () => {
     quantity: undefined,
     injected: 'should be dropped',
   }]);
-  const [item] = parseBackup(json);
-  assert.equal(item.purchaseDate, null);
-  assert.equal(item.quantity, '');
-  assert.equal('injected' in item, false);
+  const { items } = parseBackup(json);
+  assert.equal(items[0].purchaseDate, null);
+  assert.equal(items[0].quantity, '');
+  assert.equal('injected' in items[0], false);
 });
 
 test('duplicate IDs keep the last value', () => {
-  const json = serializeBackup([ITEM, { ...ITEM, name: '新しい名前' }]);
-  const items = parseBackup(json);
+  const json = serializeBackup({ items: [ITEM, { ...ITEM, name: '新しい名前' }] });
+  const { items } = parseBackup(json);
   assert.equal(items.length, 1);
   assert.equal(items[0].name, '新しい名前');
 });
 
-test('malformed files are rejected with a clear error', () => {
+test('malformed files and invalid history are rejected', () => {
   assert.throws(() => parseBackup('not json'), /JSONファイルを読み取れませんでした/);
   assert.throws(() => parseBackup('{}'), /形式が正しくありません/);
   assert.throws(() => parseBackup(JSON.stringify({ items: [] })), /このアプリのバックアップファイルではありません/);
+  assert.throws(() => parseBackup(JSON.stringify({
+    format: 'receipt-expiry-backup', items: [], history: [{ ...HISTORY, reason: 'bad' }],
+  })), /履歴1行目の種別が不正/);
 
-  const invalid = (item) => JSON.stringify({ format: 'receipt-expiry-backup', version: 1, items: [item] });
+  const invalid = (item) => JSON.stringify({ format: 'receipt-expiry-backup', items: [item] });
   assert.throws(() => parseBackup(invalid({ ...ITEM, storage: 'bogus' })), /保存場所が不正/);
   assert.throws(() => parseBackup(invalid({ ...ITEM, expiryDate: '2026-02-30' })), /賞味期限が不正/);
   assert.throws(() => parseBackup(invalid({ ...ITEM, createdAt: 'yesterday' })), /登録日時が不正/);

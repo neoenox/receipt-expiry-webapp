@@ -1,6 +1,7 @@
 const FORMAT = 'receipt-expiry-backup';
-const VERSION = 1;
+const VERSION = 2;
 const VALID_STORAGE = new Set(['fridge', 'freezer', 'pantry']);
+const VALID_REASONS = new Set(['eaten', 'discarded']);
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 
 function isValidDate(value) {
@@ -10,25 +11,16 @@ function isValidDate(value) {
   return date.getUTCFullYear() === year && date.getUTCMonth() === month - 1 && date.getUTCDate() === day;
 }
 
-/** 既知のフィールドだけを残し、ファイル由来の値を安全な形に整える。 */
 function normalizeItem(raw, index) {
-  const label = `${index + 1}行目`;
-  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
-    throw new Error(`バックアップの${label}が不正です。`);
-  }
+  const label = `在庫${index + 1}行目`;
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) throw new Error(`バックアップの${label}が不正です。`);
   if (typeof raw.id !== 'string' || !raw.id) throw new Error(`バックアップの${label}にIDがありません。`);
   if (typeof raw.name !== 'string' || !raw.name.trim()) throw new Error(`バックアップの${label}に食材名がありません。`);
   if (!VALID_STORAGE.has(raw.storage)) throw new Error(`バックアップの${label}の保存場所が不正です。`);
   if (!isValidDate(raw.expiryDate)) throw new Error(`バックアップの${label}の賞味期限が不正です。`);
-  if (raw.purchaseDate != null && !isValidDate(raw.purchaseDate)) {
-    throw new Error(`バックアップの${label}の購入日が不正です。`);
-  }
-  if (raw.quantity != null && typeof raw.quantity !== 'string') {
-    throw new Error(`バックアップの${label}の数量が不正です。`);
-  }
-  if (typeof raw.createdAt !== 'number' || !Number.isFinite(raw.createdAt)) {
-    throw new Error(`バックアップの${label}の登録日時が不正です。`);
-  }
+  if (raw.purchaseDate != null && !isValidDate(raw.purchaseDate)) throw new Error(`バックアップの${label}の購入日が不正です。`);
+  if (raw.quantity != null && typeof raw.quantity !== 'string') throw new Error(`バックアップの${label}の数量が不正です。`);
+  if (typeof raw.createdAt !== 'number' || !Number.isFinite(raw.createdAt)) throw new Error(`バックアップの${label}の登録日時が不正です。`);
   return {
     id: raw.id,
     name: raw.name.trim().slice(0, 80),
@@ -40,16 +32,52 @@ function normalizeItem(raw, index) {
   };
 }
 
-export function serializeBackup(items) {
+function normalizeHistory(raw, index) {
+  const label = `履歴${index + 1}行目`;
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) throw new Error(`バックアップの${label}が不正です。`);
+  if (typeof raw.id !== 'string' || !raw.id) throw new Error(`バックアップの${label}にIDがありません。`);
+  if (typeof raw.name !== 'string' || !raw.name.trim()) throw new Error(`バックアップの${label}に食材名がありません。`);
+  if (!VALID_REASONS.has(raw.reason)) throw new Error(`バックアップの${label}の種別が不正です。`);
+  if (typeof raw.consumedAt !== 'number' || !Number.isFinite(raw.consumedAt)) throw new Error(`バックアップの${label}の記録日時が不正です。`);
+  return {
+    id: raw.id,
+    name: raw.name.trim().slice(0, 80),
+    storage: VALID_STORAGE.has(raw.storage) ? raw.storage : 'pantry',
+    expiryDate: isValidDate(raw.expiryDate) ? raw.expiryDate : '',
+    quantity: typeof raw.quantity === 'string' ? raw.quantity.trim().slice(0, 40) : '',
+    reason: raw.reason,
+    consumedAt: raw.consumedAt,
+  };
+}
+
+function normalizeHint(raw, index) {
+  const label = `学習値${index + 1}行目`;
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) throw new Error(`バックアップの${label}が不正です。`);
+  if (typeof raw.name !== 'string' || !raw.name.trim()) throw new Error(`バックアップの${label}に食材名がありません。`);
+  if (!isValidDate(raw.expiryDate)) throw new Error(`バックアップの${label}の賞味期限が不正です。`);
+  if (typeof raw.updatedAt !== 'number' || !Number.isFinite(raw.updatedAt)) throw new Error(`バックアップの${label}の更新日時が不正です。`);
+  return { name: raw.name.trim().slice(0, 80), expiryDate: raw.expiryDate, updatedAt: raw.updatedAt };
+}
+
+function mergeByKey(items, keyOf) {
+  const map = new Map();
+  for (const item of items) map.set(keyOf(item), item);
+  return Array.from(map.values());
+}
+
+export function serializeBackup(data) {
+  const source = Array.isArray(data) ? { items: data } : (data || {});
   return JSON.stringify({
     format: FORMAT,
     version: VERSION,
     exportedAt: new Date().toISOString(),
-    items: items.map(normalizeItem),
+    items: (source.items || []).map(normalizeItem),
+    history: (source.history || []).map(normalizeHistory),
+    hints: (source.hints || []).map(normalizeHint),
   }, null, 2);
 }
 
-/** JSON文字列を検証し、ID重複を後勝ちでマージした物品配列を返す。 */
+/** 形式・必須項目を検証し、キー重複は後勝ちでマージしたデータを返す。 */
 export function parseBackup(text) {
   let data;
   try {
@@ -62,10 +90,12 @@ export function parseBackup(text) {
   }
   if (data.format !== FORMAT) throw new Error('このアプリのバックアップファイルではありません。');
 
-  const byId = new Map();
-  data.items.forEach((raw, index) => {
-    const item = normalizeItem(raw, index);
-    byId.set(item.id, item);
-  });
-  return Array.from(byId.values());
+  const items = (data.items || []).map(normalizeItem);
+  const history = (data.history || []).map(normalizeHistory);
+  const hints = (data.hints || []).map(normalizeHint);
+  return {
+    items: mergeByKey(items, (item) => item.id),
+    history: mergeByKey(history, (entry) => entry.id),
+    hints: mergeByKey(hints, (hint) => hint.name),
+  };
 }
