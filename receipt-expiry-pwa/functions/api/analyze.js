@@ -104,8 +104,8 @@ async function isRateLimited(request, env) {
       ]);
       return minuteCount > RATE_PER_MINUTE || dayCount > RATE_PER_DAY;
     } catch {
-      // KV 障害時は解析そのものを止めない。
-      return false;
+      // Shared-key requests must fail closed when the global counter is unavailable.
+      throw new Error('RATE_LIMIT_STORAGE_UNAVAILABLE');
     }
   }
 
