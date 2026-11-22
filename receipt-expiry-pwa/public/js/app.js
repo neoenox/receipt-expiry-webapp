@@ -1,15 +1,14 @@
-import { initDB, addItemsBulk, getAllItems, getAllItemsSorted, importItems, updateItem, deleteItem, enqueueAnalysis, listQueuedAnalyses, updateQueuedAnalysis, deleteQueuedAnalysis, addConsumption, listConsumption, importConsumption, saveExpiryHint, listExpiryHints, importExpiryHints } from './db.js';
+import { initDB, addItemsBulk, getAllItemsSorted, updateItem, deleteItem, enqueueAnalysis, addConsumption, listConsumption, saveExpiryHint, listExpiryHints } from './db.js';
 import { processReceiptImage } from './imageProcessor.js';
 import { analyzeReceipt, isValidDate } from './apiClient.js';
-import { serializeBackup, parseBackup } from './backup.js';
-import { createQueuedAnalysis, nextAttempt, shouldDiscard } from './queue.js';
+import { createQueuedAnalysis } from './queue.js';
 import { createConsumption, summarizeHistory } from './history.js';
 import { createExpiryHint, buildHintMap, normalizeFoodName } from './learning.js';
 import { filterAndSortItems } from './inventory.js';
+import { createSettings } from './settings.js';
+import { createQueueUI } from './queueUI.js';
 
 const STORAGE_LABELS = { fridge: '冷蔵', freezer: '冷凍', pantry: '常温' };
-const BYOK_STORAGE_KEY = 'receipt-expiry-gemini-key';
-const NOTIFY_STORAGE_KEY = 'receipt-expiry-notify';
 
 const byId = (id) => document.getElementById(id);
 const ui = {
@@ -42,6 +41,8 @@ const ui = {
   importBackupBtn: byId('import-backup-btn'),
   backupInput: byId('backup-input'),
   backupStatus: byId('backup-status'),
+
+  backupReplace: byId('backup-replace'),
 
   queueStatus: byId('queue-status'),
   retryQueueBtn: byId('retry-queue-btn'),
@@ -84,6 +85,21 @@ const state = {
 
   savingKey: false,
 };
+
+
+const queueUI = createQueueUI({ ui, state, showToast, submitAnalysis });
+const settings = createSettings({
+  ui,
+  state,
+  byId,
+  showToast,
+  openModal,
+  todayISO,
+  isValidDate,
+  refreshItems,
+  refreshHistorySummary,
+  refreshQueueStatus: () => queueUI.refreshQueueStatus(),
+});
 
 /* ---------- 日付・ステータス ---------- */
 
@@ -165,7 +181,7 @@ async function refreshItems() {
   state.items = await getAllItemsSorted();
   renderList();
 
-  void syncPushReminder();
+  void settings.syncPushReminder();
 }
 
 function renderList() {
@@ -225,7 +241,7 @@ function handleFileSelected(event) {
 }
 
 async function submitAnalysis(payload) {
-  const result = await analyzeReceipt({ ...payload, customApiKey: getApiKey() || undefined });
+  const result = await analyzeReceipt({ ...payload, customApiKey: settings.getApiKey() || undefined });
   if (result.items.length === 0) {
     showToast('食材が見つかりませんでした。別の画像をお試しください。');
     return;
@@ -241,7 +257,7 @@ async function analyzeFile(file) {
     const payload = { imageBase64: base64, mimeType, clientDate: todayISO() };
     if (!navigator.onLine) {
       await enqueueAnalysis(createQueuedAnalysis(payload));
-      await refreshQueueStatus();
+      await queueUI.refreshQueueStatus();
       showToast('オフラインです。接続が戻ったら自動で解析します。');
       return;
     }
@@ -253,96 +269,6 @@ async function analyzeFile(file) {
   }
 }
 
-function renderQueueList(jobs) {
-  ui.queueList.replaceChildren();
-  for (const job of jobs) {
-    const row = document.createElement('div');
-    row.className = 'queue-row';
-    const info = document.createElement('span');
-    info.className = 'queue-row-info';
-    const created = new Date(job.createdAt || Date.now()).toLocaleString('ja-JP');
-    info.textContent = `${created} ／ 試行 ${Number(job.attempts) || 0}/3`;
-    const actions = document.createElement('span');
-    actions.className = 'queue-row-actions';
-    for (const [action, label] of [['retry', '再試行'], ['delete', '削除']]) {
-      const button = document.createElement('button');
-      button.type = 'button';
-      button.dataset.action = action;
-      button.dataset.id = job.id;
-      button.textContent = label;
-      actions.append(button);
-    }
-    row.append(info, actions);
-    ui.queueList.append(row);
-  }
-}
-
-async function refreshQueueStatus() {
-  const jobs = await listQueuedAnalyses();
-  ui.queueStatus.textContent = jobs.length ? `未送信の解析: ${jobs.length}件` : '未送信の解析はありません。';
-  ui.retryQueueBtn.disabled = jobs.length === 0;
-  renderQueueList(jobs);
-}
-
-async function retryQueueJob(id) {
-  const jobs = await listQueuedAnalyses();
-  const job = jobs.find((entry) => entry.id === id);
-  if (!job) return;
-  try {
-    await submitAnalysis({ imageBase64: job.imageBase64, mimeType: job.mimeType, clientDate: job.clientDate });
-    await deleteQueuedAnalysis(id);
-    showToast('解析が完了しました。');
-  } catch (error) {
-    const attempted = nextAttempt(job);
-    if (shouldDiscard(attempted)) {
-      await deleteQueuedAnalysis(id);
-      showToast('解析できなかったため削除しました。');
-    } else {
-      await updateQueuedAnalysis(attempted);
-      showToast(`再試行できませんでした: ${error.message || '不明なエラー'}`);
-    }
-  }
-  await refreshQueueStatus();
-}
-
-async function deleteQueueJob(id) {
-  await deleteQueuedAnalysis(id);
-  await refreshQueueStatus();
-  showToast('未送信の解析を削除しました。');
-}
-
-async function processQueue() {
-  if (state.processingQueue) return;
-  state.processingQueue = true;
-  try {
-    const jobs = await listQueuedAnalyses();
-    for (const job of jobs) {
-      try {
-        await submitAnalysis({
-          imageBase64: job.imageBase64,
-          mimeType: job.mimeType,
-          clientDate: job.clientDate,
-        });
-        await deleteQueuedAnalysis(job.id);
-      } catch (error) {
-        const attempted = nextAttempt(job);
-        if (shouldDiscard(attempted)) {
-          await deleteQueuedAnalysis(job.id);
-          showToast('解析できなかったレシートを削除しました。');
-        } else {
-          await updateQueuedAnalysis(attempted);
-          showToast(`再試行できませんでした: ${error.message || '不明なエラー'}`);
-        }
-        break;
-      }
-    }
-    await refreshQueueStatus();
-  } catch (error) {
-    console.error('[queue]', error);
-  } finally {
-    state.processingQueue = false;
-  }
-}
 
 /* ---------- 解析結果の確認・一括登録 ---------- */
 
@@ -489,223 +415,6 @@ async function refreshHistorySummary() {
   ui.historySummary.textContent = `今月: 食べた ${summary.eaten}件 / 捨てた ${summary.discarded}件（合計 ${summary.total}件）`;
 }
 
-function isNotifyEnabled() {
-  try {
-    return localStorage.getItem(NOTIFY_STORAGE_KEY) === '1';
-  } catch {
-    return false;
-  }
-}
-
-function refreshNotifyStatus() {
-  if (!('Notification' in window) || !('serviceWorker' in navigator) || !('PushManager' in window)) {
-    ui.notifyStatus.textContent = 'このブラウザはプッシュ通知に対応していません。';
-    return;
-  }
-  ui.notifyStatus.textContent = isNotifyEnabled()
-    ? `通知を有効にしています（${Notification.permission}）。`
-    : '通知は無効です。';
-}
-
-function urlBase64ToUint8Array(base64String) {
-  const padding = '='.repeat((4 - (base64String.length % 4)) % 4);
-  const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
-  const raw = atob(base64);
-  return Uint8Array.from(raw, (char) => char.charCodeAt(0));
-}
-
-async function enableNotifications() {
-  try {
-    if (!('Notification' in window) || !('serviceWorker' in navigator) || !('PushManager' in window)) {
-      ui.notifyStatus.textContent = 'このブラウザはプッシュ通知に対応していません。';
-      return;
-    }
-    const permission = await Notification.requestPermission();
-    if (permission !== 'granted') {
-      ui.notifyStatus.textContent = '通知が許可されませんでした。ブラウザ設定で許可してください。';
-      return;
-    }
-    const config = await fetch('/api/push/config').then((response) => response.json());
-    if (!config.publicKey) throw new Error('通知の設定を取得できませんでした。');
-    const registration = await navigator.serviceWorker.ready;
-    let subscription = await registration.pushManager.getSubscription();
-    if (!subscription) {
-      subscription = await registration.pushManager.subscribe({
-        userVisibleOnly: true,
-        applicationServerKey: urlBase64ToUint8Array(config.publicKey),
-      });
-    }
-    localStorage.setItem(NOTIFY_STORAGE_KEY, '1');
-    await syncPushReminder();
-    refreshNotifyStatus();
-    showToast('賞味期限の通知を有効にしました。');
-  } catch (error) {
-    ui.notifyStatus.textContent = error.message || '通知を有効にできませんでした。';
-    showToast('通知を有効にできませんでした。');
-  }
-}
-
-async function disableNotifications() {
-  try {
-    if ('serviceWorker' in navigator) {
-      const registration = await navigator.serviceWorker.ready;
-      const subscription = await registration.pushManager.getSubscription();
-      if (subscription) {
-        await fetch('/api/push/unsubscribe', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ endpoint: subscription.endpoint }),
-        });
-        await subscription.unsubscribe();
-      }
-    }
-    localStorage.removeItem(NOTIFY_STORAGE_KEY);
-    refreshNotifyStatus();
-    showToast('通知を無効にしました。');
-  } catch (error) {
-    showToast(error.message || '通知を無効にできませんでした。');
-  }
-}
-
-async function syncPushReminder() {
-  if (state.syncingPush || !isNotifyEnabled()) return;
-  state.syncingPush = true;
-  try {
-    const registration = await navigator.serviceWorker.ready;
-    const subscription = await registration.pushManager.getSubscription();
-    if (!subscription) return;
-    const dates = state.items
-      .map((item) => item.expiryDate)
-      .filter((date) => isValidDate(date))
-      .sort();
-    await fetch('/api/push/subscribe', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ subscription: subscription.toJSON(), nextExpiry: dates[0] || null }),
-    });
-  } catch {
-    // 通知の同期失敗は在庫操作を止めない。
-  } finally {
-    state.syncingPush = false;
-  }
-}
-
-/* ---------- 設定・BYOK・PWA ---------- */
-
-function getApiKey() {
-  try {
-    return localStorage.getItem(BYOK_STORAGE_KEY) || '';
-  } catch {
-    return '';
-  }
-}
-
-function refreshApiKeyStatus() {
-  ui.apiKeyInput.value = getApiKey();
-  ui.apiKeyStatus.textContent = getApiKey()
-    ? 'この端末にAPIキーが保存されています（解析時に自動で使用されます）。'
-    : '未設定の場合は、アプリ側の共通キーで解析します。';
-}
-
-function openSettings() {
-  refreshApiKeyStatus();
-  ui.backupStatus.textContent = '';
-  refreshNotifyStatus();
-  void refreshQueueStatus();
-  void refreshHistorySummary();
-  openModal(ui.settingsModal);
-}
-
-async function saveApiKey() {
-  if (state.savingKey) return;
-  const key = ui.apiKeyInput.value.trim();
-  if (!key) {
-    ui.apiKeyStatus.textContent = 'APIキーを入力してください。';
-    return;
-  }
-  state.savingKey = true;
-  const button = byId('save-api-key');
-  button.disabled = true;
-  ui.apiKeyStatus.textContent = 'APIキーを検証しています…';
-  try {
-    const response = await fetch('/api/validate-key', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ apiKey: key }),
-    });
-    if (!response.ok) {
-      const data = await response.json().catch(() => ({}));
-      ui.apiKeyStatus.textContent = data?.error?.code === 'INVALID_KEY'
-        ? 'APIキーが無効です。入力内容を確認してください。'
-        : 'APIキーを検証できませんでした。しばらくして再度お試しください。';
-      return;
-    }
-    try {
-      localStorage.setItem(BYOK_STORAGE_KEY, key);
-      ui.apiKeyStatus.textContent = 'APIキーを検証して保存しました。';
-    } catch {
-      ui.apiKeyStatus.textContent = 'このブラウザではキーを保存できません。';
-    }
-  } catch {
-    ui.apiKeyStatus.textContent = 'APIキーを検証できませんでした。通信環境を確認してください。';
-  } finally {
-    state.savingKey = false;
-    button.disabled = false;
-  }
-}
-
-function clearApiKey() {
-  try {
-    localStorage.removeItem(BYOK_STORAGE_KEY);
-    ui.apiKeyInput.value = '';
-    ui.apiKeyStatus.textContent = 'APIキーを削除しました。共通キーに戻ります。';
-  } catch {
-    ui.apiKeyStatus.textContent = 'このブラウザではキーを削除できません。';
-  }
-}
-
-async function exportBackup() {
-  try {
-    const items = await getAllItems();
-    const history = await listConsumption();
-    const hints = await listExpiryHints();
-    const blob = new Blob([serializeBackup({ items, history, hints })], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `receipt-expiry-backup-${todayISO()}.json`;
-    document.body.append(link);
-    link.click();
-    link.remove();
-    setTimeout(() => URL.revokeObjectURL(url), 1000);
-    ui.backupStatus.textContent = `在庫${items.length}件・履歴${history.length}件・学習値${hints.length}件を書き出しました。`;
-    showToast('バックアップを書き出しました。');
-  } catch (error) {
-    ui.backupStatus.textContent = error.message || '書き出しに失敗しました。';
-    showToast(error.message || '書き出しに失敗しました。');
-  }
-}
-
-async function handleBackupFileSelected(event) {
-  const input = event.currentTarget;
-  const file = input.files?.[0];
-  input.value = '';
-  if (!file) return;
-  try {
-    const data = parseBackup(await file.text());
-    await importItems(data.items);
-    await importConsumption(data.history);
-    await importExpiryHints(data.hints);
-    state.expiryHints = buildHintMap(await listExpiryHints());
-    await refreshItems();
-    await refreshHistorySummary();
-    ui.backupStatus.textContent = `在庫${data.items.length}件・履歴${data.history.length}件・学習値${data.hints.length}件を読み込みました。`;
-    showToast(`${data.items.length}件の在庫を読み込みました。`);
-  } catch (error) {
-    ui.backupStatus.textContent = error.message || '読み込みに失敗しました。';
-    showToast(error.message || '読み込みに失敗しました。');
-  }
-}
 
 function registerPWAEvents() {
   window.addEventListener('beforeinstallprompt', (event) => {
@@ -748,7 +457,7 @@ function registerServiceWorker() {
 function wireEvents() {
   byId('scan-btn').addEventListener('click', openSourceModal);
   byId('add-btn').addEventListener('click', () => openEditModal());
-  byId('settings-btn').addEventListener('click', openSettings);
+  byId('settings-btn').addEventListener('click', settings.openSettings);
   byId('settings-close').addEventListener('click', () => closeModal(ui.settingsModal));
 
   byId('use-camera').addEventListener('click', () => ui.cameraInput.click());
@@ -779,25 +488,8 @@ function wireEvents() {
     state.consumeTarget = null;
     closeModal(ui.consumeModal);
   });
-  ui.retryQueueBtn.addEventListener('click', () => void processQueue());
-
-  ui.queueList.addEventListener('click', (event) => {
-    const button = event.target.closest('button[data-action]');
-    if (!button) return;
-    if (button.dataset.action === 'retry') void retryQueueJob(button.dataset.id);
-    if (button.dataset.action === 'delete') void deleteQueueJob(button.dataset.id);
-  });
-  window.addEventListener('online', () => void processQueue());
-
-  ui.notifyEnableBtn.addEventListener('click', () => void enableNotifications());
-  ui.notifyDisableBtn.addEventListener('click', () => void disableNotifications());
-  byId('save-api-key').addEventListener('click', saveApiKey);
-  byId('clear-api-key').addEventListener('click', clearApiKey);
-
-
-  ui.exportBackupBtn.addEventListener('click', () => void exportBackup());
-  ui.importBackupBtn.addEventListener('click', () => ui.backupInput.click());
-  ui.backupInput.addEventListener('change', handleBackupFileSelected);
+  queueUI.wire();
+  settings.wire();
 
   ui.searchInput.addEventListener('input', (event) => {
     state.search = event.target.value;
@@ -859,11 +551,11 @@ async function init() {
     await initDB();
 
     state.expiryHints = buildHintMap(await listExpiryHints());
-    await refreshQueueStatus();
+    await queueUI.refreshQueueStatus();
 
-    await syncPushReminder();
+    await settings.syncPushReminder();
     await refreshHistorySummary();
-    await processQueue();
+    await queueUI.processQueue();
     await refreshItems();
   } catch (error) {
     showToast(error.message || '在庫を読み込めませんでした。');

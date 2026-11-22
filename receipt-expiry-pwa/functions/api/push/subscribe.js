@@ -36,9 +36,11 @@ export async function onRequestPost({ request, env }) {
   }
 
   const nextExpiry = DATE_PATTERN.test(body.nextExpiry || '') ? body.nextExpiry : null;
+  const daysUntil = Number.isFinite(body.daysUntil) ? Math.max(-365, Math.min(365, Math.round(body.daysUntil))) : null;
   const entry = {
     subscription: { endpoint, keys: { p256dh, auth } },
     nextExpiry,
+    daysUntil,
     updatedAt: Date.now(),
   };
   try {

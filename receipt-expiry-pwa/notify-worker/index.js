@@ -3,6 +3,16 @@ import { setVapidDetails, sendNotification } from 'web-push';
 const REMINDER_TITLE = 'レシート賞味期限';
 const REMINDER_BODY = 'まもなく賞味期限の食材があります。アプリを開いて確認してください。';
 
+const REMINDER_SUFFIX = 'アプリを開いて確認してください。';
+
+export function buildReminderBody(daysUntil) {
+  if (!Number.isFinite(daysUntil)) return REMINDER_BODY;
+  const days = Math.round(daysUntil);
+  if (days <= 0) return `本日が賞味期限の食材があります。${REMINDER_SUFFIX}`;
+  if (days === 1) return `明日が賞味期限の食材があります。${REMINDER_SUFFIX}`;
+  return `最も近い賞味期限まであと${days}日です。${REMINDER_SUFFIX}`;
+}
+
 async function sendReminders(env) {
   const { keys } = await env.PUSH_KV.list();
   if (!keys.length) return;
@@ -28,7 +38,7 @@ async function sendReminders(env) {
     try {
       await sendNotification(
         entry.subscription,
-        JSON.stringify({ title: REMINDER_TITLE, body: REMINDER_BODY, url: '/' })
+        JSON.stringify({ title: REMINDER_TITLE, body: buildReminderBody(entry.daysUntil), url: '/' })
       );
       await env.PUSH_KV.put(name, JSON.stringify({ ...entry, nextExpiry: null, notifiedAt: Date.now() }));
     } catch (error) {

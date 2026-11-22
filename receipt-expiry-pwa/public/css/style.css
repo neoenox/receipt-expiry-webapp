@@ -347,6 +347,15 @@ button:focus-visible, input:focus-visible, select:focus-visible {
   font-weight: 600;
   color: var(--muted);
 }
+.checkbox-field {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  font-weight: 400;
+}
+.checkbox-field input { width: 18px; height: 18px; margin: 0; }
+
 .field input, .field select {
   display: block;
   width: 100%;

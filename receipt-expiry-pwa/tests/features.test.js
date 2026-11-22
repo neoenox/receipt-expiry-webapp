@@ -4,6 +4,9 @@ import { createQueuedAnalysis, nextAttempt, shouldDiscard, MAX_QUEUE_ATTEMPTS } 
 import { createConsumption, summarizeHistory } from '../public/js/history.js';
 import { normalizeFoodName, createExpiryHint, buildHintMap } from '../public/js/learning.js';
 import { filterAndSortItems } from '../public/js/inventory.js';
+import { dataUrlMime, base64FromDataUrl, nextQuality } from '../public/js/imageOptions.js';
+import { daysUntilDate } from '../public/js/dates.js';
+import { buildReminderBody } from '../notify-worker/index.js';
 
 test('queued analysis never stores an API key', () => {
   const job = createQueuedAnalysis({ imageBase64: 'aGVsbG8=', mimeType: 'image/jpeg', clientDate: '2026-11-22' });
@@ -50,4 +53,24 @@ test('inventory search and sort are applied together', () => {
   assert.deepEqual(filterAndSortItems(items, { search: '牛乳' }).map((i) => i.name), ['牛乳 低脂肪', '牛乳']);
   assert.deepEqual(filterAndSortItems(items, { filter: 'fridge', sort: 'createdAt' }).map((i) => i.createdAt), [3, 1]);
   assert.deepEqual(filterAndSortItems(items, { sort: 'name' }).map((i) => i.name), ['牛乳', '牛乳 低脂肪', '食パン']);
+});
+
+
+test('image helpers detect format and step down quality', () => {
+  assert.equal(dataUrlMime('data:image/webp;base64,AAAA'), 'image/webp');
+  assert.equal(dataUrlMime('data:image/png;base64,AAAA'), 'image/png');
+  assert.equal(base64FromDataUrl('data:image/webp;base64,QUJD'), 'QUJD');
+  assert.equal(nextQuality(0.9), 0.8);
+  assert.equal(nextQuality(0.7), null);
+});
+
+
+test('reminder dates and messages are computed locally', () => {
+  const now = new Date(2026, 10, 22);
+  assert.equal(daysUntilDate('2026-11-22', now), 0);
+  assert.equal(daysUntilDate('2026-11-25', now), 3);
+  assert.equal(daysUntilDate('bad', now), null);
+  assert.match(buildReminderBody(0), /本日が賞味期限/);
+  assert.match(buildReminderBody(1), /明日が賞味期限/);
+  assert.match(buildReminderBody(4), /あと4日/);
 });
