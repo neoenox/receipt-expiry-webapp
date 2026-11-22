@@ -1,5 +1,6 @@
 const MAX_SIZE = 1024;
-const JPEG_QUALITY = 0.8;
+const MAX_FILE_BYTES = 20 * 1024 * 1024;
+const JPEG_QUALITY = 0.9;
 
 /**
  * レシート画像を長辺1024pxのJPEGへリサイズし、プレフィックスなしのBase64を返す。
@@ -9,6 +10,10 @@ export async function processReceiptImage(file) {
   if (!file || typeof file.type !== 'string' || !file.type.startsWith('image/')) {
     throw new Error('画像ファイルを選択してください。');
   }
+  if (typeof file.size === 'number' && file.size > MAX_FILE_BYTES) {
+    throw new Error('画像ファイルが大きすぎます。別の画像をお試しください。');
+  }
+
 
   let source;
   let release;

@@ -36,6 +36,11 @@ jobs:
         working-directory: receipt-expiry-pwa
         run: npx --yes wrangler@4 pages functions build functions --outdir .ci-functions-build --project-directory .
 
+      - name: Run tests
+        working-directory: receipt-expiry-pwa
+        run: node --test tests/*.js
+
+
       - name: Deploy to Cloudflare Pages
         if: github.event_name == 'push' && github.ref == 'refs/heads/main' && env.HAS_CF == 'true'
         working-directory: receipt-expiry-pwa
