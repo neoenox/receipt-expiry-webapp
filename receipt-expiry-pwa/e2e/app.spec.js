@@ -1,4 +1,7 @@
 import { test, expect } from '@playwright/test';
+import { fileURLToPath } from 'node:url';
+
+const ICON_PATH = fileURLToPath(new URL('../public/icons/icon-192.png', import.meta.url));
 
 async function resetStorage(page) {
   await page.evaluate(async () => {
@@ -71,4 +74,34 @@ test('inventory add, search, sort, consume, and backup round-trip', async ({ pag
   await page.keyboard.press('Escape');
   await expect(page.locator('#item-count')).toHaveText('2件');
   await expect(page.locator('.item-name', { hasText: 'テスト牛乳' })).toBeVisible();
+});
+
+
+test('offline analysis is queued and retried after reconnection', async ({ page }) => {
+  await page.goto('/');
+  await resetStorage(page);
+
+  await page.context().setOffline(true);
+  await page.setInputFiles('#gallery-input', ICON_PATH);
+  await expect(page.locator('#toast')).toContainText('オフラインです');
+
+  await page.click('#settings-btn');
+  await expect(page.locator('#queue-status')).toContainText('未送信の解析: 1件');
+  await expect(page.locator('.queue-row')).toHaveCount(1);
+
+  await page.route('**/api/analyze', (route) => route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify({
+      purchaseDate: '2026-11-23',
+      items: [{ name: 'キュー牛乳', storage: 'fridge', expiryDate: '2026-12-01', quantity: '' }],
+    }),
+  }));
+  await page.context().setOffline(false);
+  await expect(page.locator('#result-modal')).toBeVisible({ timeout: 20_000 });
+  await expect(page.locator('#result-items .field-name')).toHaveValue('キュー牛乳');
+
+  await page.keyboard.press('Escape');
+
+  await expect(page.locator('#queue-status')).toContainText('未送信の解析はありません');
 });

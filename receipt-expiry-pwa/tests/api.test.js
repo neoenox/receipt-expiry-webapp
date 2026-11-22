@@ -86,6 +86,36 @@ test('blocks the sixth shared-key request using the KV counter', async (t) => {
   assert.equal((await last.json()).error.code, 'RATE_LIMIT_EXCEEDED');
 });
 
+test('blocks the sixth shared-key request using the Durable Object counter', async (t) => {
+  withMockFetch(t, async () => aiResponse([{ name: '牛乳', storage: 'fridge', expiryDate: '2026-11-29', quantity: '1本' }]));
+  const counts = new Map();
+  const env = {
+    GEMINI_API_KEY: 'shared-key',
+    RATE_LIMITER_DO: {
+      idFromName: (name) => name,
+      get: (id) => ({
+        async fetch() {
+          const count = (counts.get(id) || 0) + 1;
+          counts.set(id, count);
+          return new Response(JSON.stringify({ limited: count > 5 }), {
+            headers: { 'Content-Type': 'application/json' },
+          });
+        },
+      }),
+    },
+  };
+  let last;
+  for (let i = 0; i < 6; i += 1) {
+    last = await onRequestPost({
+      request: makeRequest({ imageBase64: VALID_IMAGE }, { ip: '203.0.113.21' }),
+      env,
+    });
+  }
+  assert.equal(last.status, 429);
+  assert.equal((await last.json()).error.code, 'RATE_LIMIT_EXCEEDED');
+});
+
+
 test('fails closed when rate-limit KV reads or writes fail', async () => {
   for (const rateLimitKV of [
     { async get() { throw new Error('KV read failed'); }, async put() {} },

@@ -186,6 +186,9 @@
           <button id="retry-queue-btn" class="btn is-primary" type="button">今すぐ再試行</button>
         </div>
         <p id="queue-status" class="hint" aria-live="polite"></p>
+
+        <p class="hint">再試行は最大3回です。失敗したジョブは個別に再試行または削除できます。</p>
+        <div id="queue-list" class="queue-list"></div>
       </section>
 
       <section class="settings-section">

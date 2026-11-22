@@ -3,6 +3,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { onRequestPost } from '../functions/api/analyze.js';
+import { onRequestPost as onValidateKey } from '../functions/api/validate-key.js';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../public');
 const PORT = Number(process.env.PORT || 3000);
@@ -112,6 +113,19 @@ async function handleRequest(req, res) {
 
   if (url.pathname === '/api/analyze' && req.method === 'POST') {
     await handleAnalyze(req, res, url);
+    return;
+  }
+  if (url.pathname === '/api/validate-key' && req.method === 'POST') {
+    const chunks = [];
+    for await (const chunk of req) chunks.push(chunk);
+    const request = new Request(url.href, {
+      method: 'POST',
+      headers: req.headers,
+      body: Buffer.concat(chunks),
+    });
+    const response = await onValidateKey({ request });
+    res.writeHead(response.status, Object.fromEntries(response.headers));
+    res.end(Buffer.from(await response.arrayBuffer()));
     return;
   }
 

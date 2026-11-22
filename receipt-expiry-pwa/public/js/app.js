@@ -45,6 +45,8 @@ const ui = {
 
   queueStatus: byId('queue-status'),
   retryQueueBtn: byId('retry-queue-btn'),
+
+  queueList: byId('queue-list'),
   historySummary: byId('history-summary'),
 
   notifyEnableBtn: byId('notify-enable-btn'),
@@ -79,6 +81,8 @@ const state = {
   expiryHints: new Map(),
 
   syncingPush: false,
+
+  savingKey: false,
 };
 
 /* ---------- 日付・ステータス ---------- */
@@ -249,10 +253,62 @@ async function analyzeFile(file) {
   }
 }
 
+function renderQueueList(jobs) {
+  ui.queueList.replaceChildren();
+  for (const job of jobs) {
+    const row = document.createElement('div');
+    row.className = 'queue-row';
+    const info = document.createElement('span');
+    info.className = 'queue-row-info';
+    const created = new Date(job.createdAt || Date.now()).toLocaleString('ja-JP');
+    info.textContent = `${created} ／ 試行 ${Number(job.attempts) || 0}/3`;
+    const actions = document.createElement('span');
+    actions.className = 'queue-row-actions';
+    for (const [action, label] of [['retry', '再試行'], ['delete', '削除']]) {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.dataset.action = action;
+      button.dataset.id = job.id;
+      button.textContent = label;
+      actions.append(button);
+    }
+    row.append(info, actions);
+    ui.queueList.append(row);
+  }
+}
+
 async function refreshQueueStatus() {
   const jobs = await listQueuedAnalyses();
   ui.queueStatus.textContent = jobs.length ? `未送信の解析: ${jobs.length}件` : '未送信の解析はありません。';
   ui.retryQueueBtn.disabled = jobs.length === 0;
+  renderQueueList(jobs);
+}
+
+async function retryQueueJob(id) {
+  const jobs = await listQueuedAnalyses();
+  const job = jobs.find((entry) => entry.id === id);
+  if (!job) return;
+  try {
+    await submitAnalysis({ imageBase64: job.imageBase64, mimeType: job.mimeType, clientDate: job.clientDate });
+    await deleteQueuedAnalysis(id);
+    showToast('解析が完了しました。');
+  } catch (error) {
+    const attempted = nextAttempt(job);
+    if (shouldDiscard(attempted)) {
+      await deleteQueuedAnalysis(id);
+      showToast('解析できなかったため削除しました。');
+    } else {
+      await updateQueuedAnalysis(attempted);
+      showToast(`再試行できませんでした: ${error.message || '不明なエラー'}`);
+    }
+  }
+  await refreshQueueStatus();
+}
+
+async function deleteQueueJob(id) {
+  await deleteQueuedAnalysis(id);
+  await refreshQueueStatus();
+  showToast('未送信の解析を削除しました。');
 }
 
 async function processQueue() {
@@ -560,17 +616,41 @@ function openSettings() {
   openModal(ui.settingsModal);
 }
 
-function saveApiKey() {
+async function saveApiKey() {
+  if (state.savingKey) return;
   const key = ui.apiKeyInput.value.trim();
   if (!key) {
     ui.apiKeyStatus.textContent = 'APIキーを入力してください。';
     return;
   }
+  state.savingKey = true;
+  const button = byId('save-api-key');
+  button.disabled = true;
+  ui.apiKeyStatus.textContent = 'APIキーを検証しています…';
   try {
-    localStorage.setItem(BYOK_STORAGE_KEY, key);
-    ui.apiKeyStatus.textContent = 'APIキーを保存しました。';
+    const response = await fetch('/api/validate-key', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ apiKey: key }),
+    });
+    if (!response.ok) {
+      const data = await response.json().catch(() => ({}));
+      ui.apiKeyStatus.textContent = data?.error?.code === 'INVALID_KEY'
+        ? 'APIキーが無効です。入力内容を確認してください。'
+        : 'APIキーを検証できませんでした。しばらくして再度お試しください。';
+      return;
+    }
+    try {
+      localStorage.setItem(BYOK_STORAGE_KEY, key);
+      ui.apiKeyStatus.textContent = 'APIキーを検証して保存しました。';
+    } catch {
+      ui.apiKeyStatus.textContent = 'このブラウザではキーを保存できません。';
+    }
   } catch {
-    ui.apiKeyStatus.textContent = 'このブラウザではキーを保存できません。';
+    ui.apiKeyStatus.textContent = 'APIキーを検証できませんでした。通信環境を確認してください。';
+  } finally {
+    state.savingKey = false;
+    button.disabled = false;
   }
 }
 
@@ -700,6 +780,13 @@ function wireEvents() {
     closeModal(ui.consumeModal);
   });
   ui.retryQueueBtn.addEventListener('click', () => void processQueue());
+
+  ui.queueList.addEventListener('click', (event) => {
+    const button = event.target.closest('button[data-action]');
+    if (!button) return;
+    if (button.dataset.action === 'retry') void retryQueueJob(button.dataset.id);
+    if (button.dataset.action === 'delete') void deleteQueueJob(button.dataset.id);
+  });
   window.addEventListener('online', () => void processQueue());
 
   ui.notifyEnableBtn.addEventListener('click', () => void enableNotifications());

@@ -420,6 +420,29 @@ button:focus-visible, input:focus-visible, select:focus-visible {
 .guide { margin: 8px 0 12px; padding-left: 20px; font-size: 13px; }
 .guide li { margin-bottom: 6px; }
 
+.queue-list { display: flex; flex-direction: column; gap: 8px; margin-top: 8px; }
+.queue-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+  font-size: 12px;
+}
+.queue-row-info { flex: 1; min-width: 0; }
+.queue-row-actions { display: flex; gap: 6px; }
+.queue-row-actions button {
+  min-height: 32px;
+  padding: 4px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg);
+  color: var(--text);
+  font-size: 12px;
+}
+
 .guide-details {
   margin-top: 10px;
   padding: 10px 12px;
@@ -470,4 +493,31 @@ button:focus-visible, input:focus-visible, select:focus-visible {
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; }
+}
+
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0f172a;
+    --surface: #1e293b;
+    --text: #e2e8f0;
+    --muted: #94a3b8;
+    --border: #334155;
+    --primary-soft: #064e3b;
+    --danger-soft: #450a0a;
+    --warning-soft: #451a03;
+    --safe-soft: #064e3b;
+    --shadow: 0 6px 22px rgba(0, 0, 0, .35);
+  }
+  body, .app-shell { background: var(--bg); }
+  .app-header { background: rgba(30, 41, 59, .94); }
+  .action-bar { background: linear-gradient(to top, var(--bg) 62%, rgba(15, 23, 42, 0)); }
+  .tabs { background: #0b1220; }
+  .result-row, .settings-section, .guide-details { background: #172033; }
+  .field input, .field select, .search-input, .sort-label select, .menu-btn {
+    background: #0f172a;
+    color: var(--text);
+  }
+  .guide-details code { background: #0b1220; }
+  .toast { background: rgba(226, 232, 240, .94); color: #0f172a; }
 }
