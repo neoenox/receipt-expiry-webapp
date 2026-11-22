@@ -38,7 +38,7 @@ jobs:
 
       - name: Run tests
         working-directory: receipt-expiry-pwa
-        run: node --test tests/
+        run: node --test tests/*.js
 
 
       - name: Deploy to Cloudflare Pages

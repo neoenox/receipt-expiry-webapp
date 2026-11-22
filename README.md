@@ -31,7 +31,7 @@ npx wrangler@4 login
 
 ## CI
 
-`.github/workflows/ci.yml` が PR と main push で JavaScript 構文・自動テスト（`node --test tests/`）・JSON・Shell 構文・Pages Functions のビルドを検証します。main への push では、以下の Repository secrets が揃っていれば Cloudflare Pages へ自動デプロイします。
+`.github/workflows/ci.yml` が PR と main push で JavaScript 構文・自動テスト（`node --test tests/*.js`）・JSON・Shell 構文・Pages Functions のビルドを検証します。main への push では、以下の Repository secrets が揃っていれば Cloudflare Pages へ自動デプロイします。
 
 - `CLOUDFLARE_API_TOKEN` — Pages:Edit / Account:Read 権限の API トークン
 - `CLOUDFLARE_ACCOUNT_ID` — Cloudflare アカウント ID
