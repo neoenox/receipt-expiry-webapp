@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#10b981">
+  <meta name="description" content="レシートを撮影するだけで食材と賞味期限を自動管理できるPWA">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="賞味期限スキャン">
+  <link rel="manifest" href="/manifest.json">
+  <link rel="icon" type="image/png" href="/icons/icon-192.png">
+  <link rel="apple-touch-icon" href="/icons/icon-192.png">
+  <link rel="stylesheet" href="/css/style.css">
+  <title>レシート賞味期限スキャナー</title>
+</head>
+<body>
+  <div class="app-shell">
+    <header class="app-header">
+      <div class="brand">
+        <span class="brand-mark" aria-hidden="true">✓</span>
+        <div>
+          <h1>レシート賞味期限</h1>
+          <p>撮影して、食材をムダなく。</p>
+        </div>
+      </div>
+      <button id="settings-btn" class="icon-btn" type="button" aria-label="設定を開く" title="設定">
+        <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path fill="currentColor" d="M19.4 13a7.8 7.8 0 0 0 0-2l2.1-1.6a.5.5 0 0 0 .1-.6l-2-3.5a.5.5 0 0 0-.6-.2l-2.5 1a7.6 7.6 0 0 0-1.7-1L14.5 2.5a.5.5 0 0 0-.5-.4h-4a.5.5 0 0 0-.5.4l-.3 2.6a7.6 7.6 0 0 0-1.7 1l-2.5-1a.5.5 0 0 0-.6.2l-2 3.5a.5.5 0 0 0 .1.6L4.6 11a7.8 7.8 0 0 0 0 2l-2.1 1.6a.5.5 0 0 0-.1.6l2 3.5a.5.5 0 0 0 .6.2l2.5-1a7.6 7.6 0 0 0 1.7 1l.3 2.6a.5.5 0 0 0 .5.4h4a.5.5 0 0 0 .5-.4l.3-2.6a7.6 7.6 0 0 0 1.7-1l2.5 1a.5.5 0 0 0 .6-.2l2-3.5a.5.5 0 0 0-.1-.6L19.4 13ZM12 15.5a3.5 3.5 0 1 1 0-7 3.5 3.5 0 0 1 0 7Z"/></svg>
+      </button>
+    </header>
+
+    <main class="app-main">
+      <div class="tabs" id="storage-tabs" role="tablist" aria-label="保存場所で絞り込み">
+        <button class="tab is-active" type="button" role="tab" aria-selected="true" data-storage="all">すべて</button>
+        <button class="tab" type="button" role="tab" aria-selected="false" data-storage="fridge">冷蔵</button>
+        <button class="tab" type="button" role="tab" aria-selected="false" data-storage="freezer">冷凍</button>
+        <button class="tab" type="button" role="tab" aria-selected="false" data-storage="pantry">常温</button>
+      </div>
+
+      <div class="list-heading">
+        <h2>在庫一覧</h2>
+        <span id="item-count" class="count">0件</span>
+      </div>
+
+      <div id="item-list" class="item-list" aria-live="polite"></div>
+
+      <div id="empty-state" class="empty-state">
+        <div class="empty-icon" aria-hidden="true">🧾</div>
+        <p id="empty-title">まだ食材がありません</p>
+        <p id="empty-detail">レシートを撮影するか、＋ボタンから食材を追加してください。</p>
+      </div>
+    </main>
+
+    <nav class="action-bar" aria-label="操作">
+      <button id="add-btn" class="fab fab-sub" type="button" aria-label="食材を手動追加" title="手動追加">
+        <svg viewBox="0 0 24 24" width="26" height="26" aria-hidden="true"><path fill="currentColor" d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2Z"/></svg>
+      </button>
+      <button id="scan-btn" class="fab fab-main" type="button">
+        <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path fill="currentColor" d="M9 4 7.8 6H4a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-3.8L15 4H9Zm3 5a5.5 5.5 0 1 1 0 11 5.5 5.5 0 0 1 0-11Zm0 2a3.5 3.5 0 1 0 0 7 3.5 3.5 0 0 0 0-7Z"/></svg>
+        レシートを撮影
+      </button>
+    </nav>
+  </div>
+
+  <input id="camera-input" type="file" accept="image/*" capture="environment" hidden>
+  <input id="gallery-input" type="file" accept="image/*" hidden>
+
+  <div id="source-modal" class="overlay hidden" role="dialog" aria-modal="true" aria-labelledby="source-title">
+    <div class="sheet">
+      <h2 id="source-title">レシート画像を選択</h2>
+      <p class="sheet-lead">撮影するか、端末に保存済みの画像を選んでください。</p>
+      <button id="use-camera" class="menu-btn" type="button">📷　カメラで撮影</button>
+      <button id="use-gallery" class="menu-btn" type="button">🖼　ギャラリーから選択</button>
+      <button id="source-cancel" class="menu-btn is-ghost" type="button">キャンセル</button>
+    </div>
+  </div>
+
+  <div id="loading-overlay" class="overlay hidden" role="status" aria-live="polite">
+    <div class="loading-box">
+      <div class="spinner" aria-hidden="true"></div>
+      <p>AIがレシートを解析しています…</p>
+      <small>数秒かかる場合があります</small>
+    </div>
+  </div>
+
+  <div id="result-modal" class="overlay hidden" role="dialog" aria-modal="true" aria-labelledby="result-title">
+    <div class="sheet sheet-wide">
+      <h2 id="result-title">解析結果を確認</h2>
+      <p id="result-summary" class="sheet-lead"></p>
+      <div id="result-items" class="result-list"></div>
+      <div class="sheet-actions">
+        <button id="result-add-row" class="btn is-ghost" type="button">＋ 手動で追加</button>
+        <span class="spacer"></span>
+        <button id="result-cancel" class="btn is-ghost" type="button">キャンセル</button>
+        <button id="result-save" class="btn is-primary" type="button">一括登録</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="edit-modal" class="overlay hidden" role="dialog" aria-modal="true" aria-labelledby="edit-title">
+    <div class="sheet">
+      <h2 id="edit-title">食材を追加</h2>
+      <form id="edit-form" novalidate>
+        <label class="field">食材名
+          <input id="edit-name" type="text" maxlength="80" required placeholder="例：特濃牛乳">
+        </label>
+        <div class="form-grid">
+          <label class="field">保存場所
+            <select id="edit-storage">
+              <option value="fridge">冷蔵</option>
+              <option value="freezer">冷凍</option>
+              <option value="pantry">常温</option>
+            </select>
+          </label>
+          <label class="field">賞味期限
+            <input id="edit-expiry" type="date" required>
+          </label>
+        </div>
+        <label class="field">数量・メモ
+          <input id="edit-quantity" type="text" maxlength="40" placeholder="例：1パック（任意）">
+        </label>
+        <p id="edit-error" class="form-error hidden"></p>
+        <div class="sheet-actions">
+          <button id="edit-delete" class="btn is-danger" type="button">削除</button>
+          <span class="spacer"></span>
+          <button id="edit-cancel" class="btn is-ghost" type="button">キャンセル</button>
+          <button class="btn is-primary" type="submit">保存</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <div id="settings-modal" class="overlay hidden" role="dialog" aria-modal="true" aria-labelledby="settings-title">
+    <div class="sheet sheet-wide">
+      <h2 id="settings-title">設定・使い方</h2>
+
+      <section class="settings-section">
+        <h3>ホーム画面に追加（PWA）</h3>
+        <ol class="guide">
+          <li><strong>iOS Safari:</strong> 共有ボタン →「ホーム画面に追加」</li>
+          <li><strong>Android Chrome:</strong> メニュー →「ホーム画面に追加」または「アプリをインストール」</li>
+        </ol>
+        <button id="install-btn" class="btn is-primary hidden" type="button">ホーム画面に追加</button>
+        <p class="hint">追加すると、アイコンから全画面で起動できます。保存済みの在庫はオフラインでも閲覧できます。</p>
+      </section>
+
+      <section class="settings-section">
+        <h3>自分のGemini APIキーを使う（BYOK）</h3>
+        <p class="hint">キーを登録すると共有の利用制限なしで解析できます。キーはこの端末の localStorage にのみ保存され、サーバーには保存されません。</p>
+        <label class="field">Gemini API キー
+          <input id="api-key-input" type="password" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="AIzaSy...">
+        </label>
+        <div class="inline-actions">
+          <button id="save-api-key" class="btn is-primary" type="button">保存</button>
+          <button id="clear-api-key" class="btn is-ghost" type="button">削除</button>
+        </div>
+        <p id="api-key-status" class="hint" aria-live="polite"></p>
+      </section>
+
+      <button id="settings-close" class="btn is-ghost" type="button">閉じる</button>
+    </div>
+  </div>
+
+  <div id="toast" class="toast hidden" role="status" aria-live="polite"></div>
+
+  <template id="item-card-template">
+    <article class="item-card">
+      <button class="item-card-main" type="button">
+        <span class="item-name"></span>
+        <span class="item-meta">
+          <span class="item-storage"></span>
+          <span class="item-quantity"></span>
+        </span>
+      </button>
+      <div class="item-right">
+        <span class="badge"></span>
+        <time class="item-expiry"></time>
+      </div>
+    </article>
+  </template>
+
+  <template id="result-row-template">
+    <div class="result-row">
+      <div class="row-top">
+        <label class="field row-name">食材名
+          <input class="field-name" type="text" maxlength="80" required placeholder="食材名">
+        </label>
+        <button class="row-remove" type="button" aria-label="この行を削除">×</button>
+      </div>
+      <div class="form-grid">
+        <label class="field">保存場所
+          <select class="field-storage">
+            <option value="fridge">冷蔵</option>
+            <option value="freezer">冷凍</option>
+            <option value="pantry">常温</option>
+          </select>
+        </label>
+        <label class="field">予想賞味期限
+          <input class="field-expiry" type="date" required>
+        </label>
+      </div>
+      <label class="field">数量・メモ
+        <input class="field-quantity" type="text" maxlength="40" placeholder="例：1パック">
+      </label>
+    </div>
+  </template>
+
+  <script type="module" src="/js/app.js"></script>
+</body>
+</html>

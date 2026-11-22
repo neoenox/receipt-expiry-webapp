@@ -1,0 +1,8 @@
+node_modules/
+.wrangler/
+.ci-functions-build/
+.env
+.env.*
+*.log
+.DS_Store
+Thumbs.db
