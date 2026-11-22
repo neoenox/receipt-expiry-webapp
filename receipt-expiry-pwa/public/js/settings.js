@@ -232,6 +232,25 @@ export function createSettings({ ui, state, byId, showToast, openModal, todayISO
     }
   }
 
+  function wireSettingsTabs() {
+    const tabs = document.querySelectorAll('[data-settings-tab]');
+    const panels = document.querySelectorAll('[data-settings-panel]');
+    for (const tab of tabs) {
+      tab.addEventListener('click', () => {
+        const name = tab.dataset.settingsTab;
+        for (const item of tabs) {
+          const active = item === tab;
+          item.classList.toggle('is-active', active);
+          item.setAttribute('aria-selected', String(active));
+        }
+        for (const panel of panels) {
+          panel.hidden = panel.dataset.settingsPanel !== name;
+        }
+      });
+    }
+  }
+
+
   function wire() {
     byId('save-api-key').addEventListener('click', () => void saveApiKey());
     byId('clear-api-key').addEventListener('click', clearApiKey);
@@ -240,6 +259,7 @@ export function createSettings({ ui, state, byId, showToast, openModal, todayISO
     ui.backupInput.addEventListener('change', handleBackupFileSelected);
     ui.notifyEnableBtn.addEventListener('click', () => void enableNotifications());
     ui.notifyDisableBtn.addEventListener('click', () => void disableNotifications());
+    wireSettingsTabs();
   }
 
   return {

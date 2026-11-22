@@ -158,92 +158,92 @@
     <div class="sheet sheet-wide">
       <h2 id="settings-title">設定・使い方</h2>
 
-      <section class="settings-section">
-        <h3>ホーム画面に追加（PWA）</h3>
-        <ol class="guide">
-          <li><strong>iOS Safari:</strong> 共有ボタン →「ホーム画面に追加」</li>
-          <li><strong>Android Chrome:</strong> メニュー →「ホーム画面に追加」または「アプリをインストール」</li>
-        </ol>
-        <button id="install-btn" class="btn is-primary hidden" type="button">ホーム画面に追加</button>
-        <p class="hint">追加すると、アイコンから全画面で起動できます。保存済みの在庫はオフラインでも閲覧できます。</p>
-      </section>
+      <div class="settings-tabs" role="tablist" aria-label="設定の切り替え">
+        <button class="settings-tab is-active" type="button" role="tab" aria-selected="true" data-settings-tab="basic">基本</button>
+        <button class="settings-tab" type="button" role="tab" aria-selected="false" data-settings-tab="notify">通知・キュー</button>
+        <button class="settings-tab" type="button" role="tab" aria-selected="false" data-settings-tab="data">データ・AI</button>
+      </div>
 
-      <section class="settings-section">
-        <h3>賞味期限の通知</h3>
-        <p class="hint">有効にすると、最も近い賞味期限の「日付だけ」をサーバーに保存し、その日以降にプッシュ通知を送ります。食材名や数量は送信しません。</p>
-        <div class="inline-actions">
-          <button id="notify-enable-btn" class="btn is-primary" type="button">通知を有効にする</button>
-          <button id="notify-disable-btn" class="btn is-ghost" type="button">無効にする</button>
-        </div>
-        <p id="notify-status" class="hint" aria-live="polite"></p>
-      </section>
-
-
-      <section class="settings-section">
-        <h3>オフライン解析キュー</h3>
-        <p class="hint">オフラインで撮影したレシートは、接続が戻ったら自動で解析します。APIキーは端末に保存しません。</p>
-        <div class="inline-actions">
-          <button id="retry-queue-btn" class="btn is-primary" type="button">今すぐ再試行</button>
-        </div>
-        <p id="queue-status" class="hint" aria-live="polite"></p>
-
-        <p class="hint">再試行は最大3回です。失敗したジョブは個別に再試行または削除できます。</p>
-        <div id="queue-list" class="queue-list"></div>
-      </section>
-
-      <section class="settings-section">
-        <h3>消費・廃棄の記録</h3>
-        <p id="history-summary" class="hint" aria-live="polite"></p>
-        <p class="hint">食材を削除する際に「食べた / 捨てた」を選ぶと、今月の件数がここに表示されます。</p>
-      </section>
-
-
-      <section class="settings-section">
-        <h3>在庫のバックアップ</h3>
-        <p class="hint">在庫データをJSONファイルに書き出せます。読み込み時はIDが同じ食材をファイルの内容で上書きし、それ以外の食材はそのまま残します。</p>
-        <div class="inline-actions">
-          <button id="export-backup-btn" class="btn is-primary" type="button">JSONを書き出す</button>
-          <button id="import-backup-btn" class="btn is-ghost" type="button">JSONを読み込む</button>
-        </div>
-
-        <label class="field checkbox-field">
-          <input id="backup-replace" type="checkbox"> 既存データを削除してバックアップ内容で置き換える
-        </label>
-        <input id="backup-input" type="file" accept="application/json,.json" hidden>
-        <p id="backup-status" class="hint" aria-live="polite"></p>
-      </section>
-
-
-      <section class="settings-section">
-        <h3>Gemini API キーの取得方法</h3>
-        <p class="hint">解析にはGemini APIキーが必要です。Googleアカウントがあれば無料で取得できます。</p>
-        <details id="key-guide" class="guide-details">
-          <summary>手順をみる（タップで開く）</summary>
+      <div class="settings-panel" data-settings-panel="basic">
+        <section class="settings-section">
+          <h3>ホーム画面に追加</h3>
           <ol class="guide">
-            <li>Googleアカウントで <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">Google AI Studio</a> を開く</li>
-            <li>初回は利用規約に同意する</li>
-            <li>「API Keys」→「Create API key（API キーを作成）」を押す</li>
-            <li>既存のGoogle Cloudプロジェクトを使う場合は、先に取り込んでから選択する</li>
-            <li>表示された <code>AIza...</code> の文字列をコピーし、下のBYOK欄に貼り付けて「保存」を押す</li>
+            <li><strong>iOS:</strong> 共有 →「ホーム画面に追加」</li>
+            <li><strong>Android:</strong> メニュー →「ホーム画面に追加」</li>
           </ol>
-          <p class="guide-note">2026-05-28以降の新規キーはGemini API専用の認証キーです。古い「Unrestricted」キーは拒否されるため、「Restrict to Gemini API only」を設定するか新規作成してください。</p>
-          <p class="guide-note">利用量は <a href="https://aistudio.google.com/usage" target="_blank" rel="noopener">Usage ページ</a> で確認できます。上限に達すると解析が429エラーになります。</p>
-        </details>
-      </section>
+          <button id="install-btn" class="btn is-primary hidden" type="button">ホーム画面に追加</button>
+        </section>
+        <section class="settings-section">
+          <h3>消費・廃棄の記録</h3>
+          <p id="history-summary" class="hint" aria-live="polite"></p>
+          <p class="hint">削除時に「食べた / 捨てた」を選ぶと今月の件数を表示します。</p>
+        </section>
+      </div>
 
+      <div class="settings-panel" data-settings-panel="notify" hidden>
+        <section class="settings-section">
+          <h3>賞味期限の通知</h3>
+          <p class="hint">有効にすると、最も近い賞味期限の日付だけを保存し、その日にプッシュ通知を送ります。食材名は送信しません。</p>
+          <div class="inline-actions">
+            <button id="notify-enable-btn" class="btn is-primary" type="button">通知を有効にする</button>
+            <button id="notify-disable-btn" class="btn is-ghost" type="button">無効にする</button>
+          </div>
+          <p id="notify-status" class="hint" aria-live="polite"></p>
+        </section>
+        <section class="settings-section">
+          <h3>オフライン解析キュー</h3>
+          <p class="hint">オフラインで撮影したレシートは接続復帰後に自動解析します。APIキーは保存しません。</p>
+          <div class="inline-actions">
+            <button id="retry-queue-btn" class="btn is-primary" type="button">今すぐ再試行</button>
+          </div>
+          <p id="queue-status" class="hint" aria-live="polite"></p>
+          <div id="queue-list" class="queue-list"></div>
+        </section>
+      </div>
 
-      <section class="settings-section">
-        <h3>自分のGemini APIキーを使う（BYOK）</h3>
-        <p class="hint">キーを登録すると共有の利用制限なしで解析できます。キーはこの端末の localStorage にのみ保存され、サーバーには保存されません。取得方法は上の「Gemini API キーの取得方法」を参照してください。</p>
-        <label class="field">Gemini API キー
-          <input id="api-key-input" type="password" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="AIzaSy...">
-        </label>
-        <div class="inline-actions">
-          <button id="save-api-key" class="btn is-primary" type="button">保存</button>
-          <button id="clear-api-key" class="btn is-ghost" type="button">削除</button>
-        </div>
-        <p id="api-key-status" class="hint" aria-live="polite"></p>
-      </section>
+      <div class="settings-panel" data-settings-panel="data" hidden>
+        <section class="settings-section">
+          <h3>在庫のバックアップ</h3>
+          <p class="hint">在庫・履歴・学習値を JSON で書き出し / 読み込みできます。</p>
+          <div class="inline-actions">
+            <button id="export-backup-btn" class="btn is-primary" type="button">書き出す</button>
+            <button id="import-backup-btn" class="btn is-ghost" type="button">読み込む</button>
+          </div>
+          <details class="guide-details">
+            <summary>詳細オプション</summary>
+            <label class="field checkbox-field">
+              <input id="backup-replace" type="checkbox"> 既存データを削除して置き換える
+            </label>
+          </details>
+          <input id="backup-input" type="file" accept="application/json,.json" hidden>
+          <p id="backup-status" class="hint" aria-live="polite"></p>
+        </section>
+        <section class="settings-section">
+          <h3>Gemini API キーの取得方法</h3>
+          <details id="key-guide" class="guide-details">
+            <summary>手順をみる</summary>
+            <ol class="guide">
+              <li><a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">Google AI Studio</a> を開く</li>
+              <li>「API Keys」→「Create API key」を押す</li>
+              <li>表示されたキーを下の BYOK 欄へ貼り付けて保存</li>
+            </ol>
+            <p class="guide-note">古い「Unrestricted」キーは拒否されます。使用量は <a href="https://aistudio.google.com/usage" target="_blank" rel="noopener">Usage ページ</a> で確認できます。</p>
+          </details>
+        </section>
+        <section class="settings-section">
+          <h3>自分の Gemini API キー（BYOK）</h3>
+          <p class="hint">この端末の localStorage にのみ保存されます。</p>
+          <label class="field">Gemini API キー
+            <input id="api-key-input" type="password" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="AIzaSy...">
+          </label>
+          <div class="inline-actions">
+            <button id="save-api-key" class="btn is-primary" type="button">検証して保存</button>
+            <button id="clear-api-key" class="btn is-ghost" type="button">削除</button>
+          </div>
+          <p id="api-key-status" class="hint" aria-live="polite"></p>
+        </section>
+      </div>
+
 
       <button id="settings-close" class="btn is-ghost" type="button">閉じる</button>
     </div>
