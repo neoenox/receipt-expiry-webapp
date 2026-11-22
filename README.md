@@ -85,3 +85,4 @@ Cloudflare では `wrangler.toml` の `RATE_LIMIT_KV` バインディング（KV
 - `app.js` から設定・キュー UI を `settings.js` / `queueUI.js` へ分離
 - E2E は BYOK 検証・ダークモード・通知オプトインも検証（計5ケース）
 
+- 設定画面は「基本 / 通知・キュー / データ・AI」の3タブに整理し、詳細オプションはアコーディオンに格納

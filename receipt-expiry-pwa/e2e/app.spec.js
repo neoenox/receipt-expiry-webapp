@@ -51,6 +51,8 @@ test('inventory add, search, sort, consume, and backup round-trip', async ({ pag
   await expect(page.locator('#history-summary')).toContainText('食べた 1件');
 
   const downloadPromise = page.waitForEvent('download');
+  await page.click('[data-settings-tab="data"]');
+
   await page.click('#export-backup-btn');
   const download = await downloadPromise;
   const stream = await download.createReadStream();
@@ -65,6 +67,8 @@ test('inventory add, search, sort, consume, and backup round-trip', async ({ pag
   await resetStorage(page);
   await addItem(page, '一時', '2026-12-01');
   await page.click('#settings-btn');
+
+  await page.click('[data-settings-tab="data"]');
   await page.setInputFiles('#backup-input', {
     name: 'backup.json',
     mimeType: 'application/json',
@@ -86,6 +90,8 @@ test('offline analysis is queued and retried after reconnection', async ({ page 
   await expect(page.locator('#toast')).toContainText('オフラインです');
 
   await page.click('#settings-btn');
+
+  await page.click('[data-settings-tab="notify"]');
   await expect(page.locator('#queue-status')).toContainText('未送信の解析: 1件');
   await expect(page.locator('.queue-row')).toHaveCount(1);
 
@@ -116,6 +122,10 @@ test('BYOK key is validated before it is stored', async ({ page }) => {
     body: JSON.stringify({ error: { code: 'INVALID_KEY' } }),
   }));
   await page.click('#settings-btn');
+
+  await page.click('[data-settings-tab="data"]');
+
+  expect(await page.locator('[data-settings-panel]:visible').count()).toBe(1);
   await page.fill('#api-key-input', 'bad-key');
   await page.click('#save-api-key');
   await expect(page.locator('#api-key-status')).toContainText('無効です');
@@ -168,6 +178,8 @@ test('notification opt-in succeeds with a subscribed push manager', async ({ pag
     }),
   }));
   await page.click('#settings-btn');
+
+  await page.click('[data-settings-tab="notify"]');
   await page.click('#notify-enable-btn');
   await expect(page.locator('#notify-status')).toContainText('通知を有効にしています');
 });
