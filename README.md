@@ -31,11 +31,16 @@ npx wrangler@4 login
 
 ## CI
 
-`.github/workflows/ci.yml` が PR と main への push で JavaScript 構文・JSON・Shell 構文・Pages Functions のビルドを検証します。main への push では、以下の Repository secrets が揃っていれば Cloudflare Pages へ自動デプロイします。
+`.github/workflows/ci.yml` が PR と main push で JavaScript 構文・自動テスト（`node --test tests/`）・JSON・Shell 構文・Pages Functions のビルドを検証します。main への push では、以下の Repository secrets が揃っていれば Cloudflare Pages へ自動デプロイします。
 
 - `CLOUDFLARE_API_TOKEN` — Pages:Edit / Account:Read 権限の API トークン
 - `CLOUDFLARE_ACCOUNT_ID` — Cloudflare アカウント ID
 - `GEMINI_API_KEY` — 任意。設定すると共有キーを Pages の Secret に同期します
+
+## レート制限
+
+Cloudflare では `wrangler.toml` の `RATE_LIMIT_KV` バインディング（KV namespace: `receipt-expiry-rate-limit`）で全拠点共通の利用回数を管理します。共有キー利用時のみ1分5回・1日20回を超過すると `429` を返します。KV が使えない OCI / ローカル実行ではプロセス内カウンタにフォールバックします。
+
 
 ## ブランチ保護
 

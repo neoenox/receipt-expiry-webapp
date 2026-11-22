@@ -7,6 +7,7 @@ import { onRequestPost } from '../functions/api/analyze.js';
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../public');
 const PORT = Number(process.env.PORT || 3000);
 const HOST = process.env.HOST || '127.0.0.1';
+const MAX_BODY_BYTES = 3 * 1024 * 1024;
 
 const MIME = {
   '.html': 'text/html; charset=utf-8',
@@ -24,43 +25,55 @@ function publicOrigin(request) {
   return `${proto}://${host}`;
 }
 
-const server = http.createServer(async (req, res) => {
-  const url = new URL(req.url, publicOrigin(req));
+function sendText(res, status, message) {
+  res.writeHead(status, { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'no-store' });
+  res.end(message);
+}
 
-  if (url.pathname === '/api/analyze' && req.method === 'POST') {
-    const chunks = [];
-    for await (const chunk of req) chunks.push(chunk);
-    const request = new Request(url.href, {
-      method: 'POST',
-      headers: req.headers,
-      body: Buffer.concat(chunks),
-    });
-    try {
-      const response = await onRequestPost({
-        request,
-        env: { GEMINI_API_KEY: process.env.GEMINI_API_KEY || '' },
-      });
-      res.writeHead(response.status, Object.fromEntries(response.headers));
-      res.end(Buffer.from(await response.arrayBuffer()));
-    } catch (error) {
-      console.error('[analyze]', error);
-      res.writeHead(500, { 'Content-Type': 'application/json; charset=utf-8' });
-      res.end(JSON.stringify({ error: { code: 'INTERNAL_ERROR', message: '解析処理でエラーが発生しました。' } }));
+function cacheControl(filePath) {
+  if (filePath.endsWith('sw.js')) return 'no-cache';
+  const ext = path.extname(filePath);
+  if (['.html', '.js', '.css', '.json'].includes(ext)) return 'no-cache';
+  return 'public, max-age=3600';
+}
+
+async function handleAnalyze(req, res, url) {
+  const chunks = [];
+  let size = 0;
+  for await (const chunk of req) {
+    size += chunk.length;
+    if (size > MAX_BODY_BYTES) {
+      sendText(res, 413, 'Payload Too Large');
+      return;
     }
-    return;
+    chunks.push(chunk);
   }
+  const request = new Request(url.href, {
+    method: 'POST',
+    headers: req.headers,
+    body: Buffer.concat(chunks),
+  });
+  const response = await onRequestPost({
+    request,
+    env: { GEMINI_API_KEY: process.env.GEMINI_API_KEY || '' },
+  });
+  res.writeHead(response.status, Object.fromEntries(response.headers));
+  res.end(Buffer.from(await response.arrayBuffer()));
+}
 
+async function handleStatic(req, res, url) {
   if (req.method !== 'GET' && req.method !== 'HEAD') {
     res.writeHead(405, { Allow: 'GET, HEAD' });
     res.end('Method Not Allowed');
     return;
   }
 
-  let filePath = path.resolve(ROOT, '.' + decodeURIComponent(url.pathname));
-  if (url.pathname === '/') filePath = path.join(ROOT, 'index.html');
-  if (!filePath.startsWith(ROOT)) {
-    res.writeHead(403);
-    res.end('Forbidden');
+  const filePath = url.pathname === '/'
+    ? path.join(ROOT, 'index.html')
+    : path.resolve(ROOT, '.' + decodeURIComponent(url.pathname));
+  const relative = path.relative(ROOT, filePath);
+  if (relative.startsWith('..') || path.isAbsolute(relative)) {
+    sendText(res, 403, 'Forbidden');
     return;
   }
 
@@ -68,20 +81,61 @@ const server = http.createServer(async (req, res) => {
     const data = await fs.readFile(filePath);
     res.writeHead(200, {
       'Content-Type': MIME[path.extname(filePath)] || 'application/octet-stream',
-      'Cache-Control': filePath.endsWith('sw.js') ? 'no-cache' : 'public, max-age=3600',
+      'Cache-Control': cacheControl(filePath),
     });
     res.end(req.method === 'HEAD' ? undefined : data);
-  } catch {
-    // SPAのクライアントルートはindex.htmlにフォールバックする。
+  } catch (error) {
+    if (error.code !== 'ENOENT' && error.code !== 'EISDIR') throw error;
+    // 拡張子のある静的ファイルはフォールバックせず404にする（SWがHTMLをJSとしてキャッシュするのを防ぐ）。
+    if (path.extname(url.pathname)) {
+      sendText(res, 404, 'Not Found');
+      return;
+    }
     try {
       const index = await fs.readFile(path.join(ROOT, 'index.html'));
-      res.writeHead(200, { 'Content-Type': MIME['.html'] });
+      res.writeHead(200, { 'Content-Type': MIME['.html'], 'Cache-Control': 'no-cache' });
       res.end(req.method === 'HEAD' ? undefined : index);
     } catch {
-      res.writeHead(404);
-      res.end('Not Found');
+      sendText(res, 404, 'Not Found');
     }
   }
+}
+
+async function handleRequest(req, res) {
+  let url;
+  try {
+    url = new URL(req.url, publicOrigin(req));
+  } catch {
+    sendText(res, 400, 'Bad Request');
+    return;
+  }
+
+  if (url.pathname === '/api/analyze' && req.method === 'POST') {
+    await handleAnalyze(req, res, url);
+    return;
+  }
+
+  try {
+    await handleStatic(req, res, url);
+  } catch (error) {
+    if (error instanceof URIError) {
+      sendText(res, 400, 'Bad Request');
+      return;
+    }
+    throw error;
+  }
+}
+
+const server = http.createServer((req, res) => {
+  handleRequest(req, res).catch((error) => {
+    console.error('[server]', error);
+    if (res.headersSent) {
+      res.end();
+      return;
+    }
+    res.writeHead(500, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
+    res.end(JSON.stringify({ error: { code: 'INTERNAL_ERROR', message: 'リクエストを処理できませんでした。' } }));
+  });
 });
 
 server.listen(PORT, HOST, () => {

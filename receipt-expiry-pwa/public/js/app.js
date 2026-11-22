@@ -42,6 +42,10 @@ const state = {
   resultPurchaseDate: null,
   deferredInstallPrompt: null,
   toastTimer: null,
+  modalStack: [],
+  focusBeforeModal: null,
+  savingEdit: false,
+  didReloadForUpdate: false,
 };
 
 /* ---------- 日付・ステータス ---------- */
@@ -88,11 +92,23 @@ function statusFor(days) {
 /* ---------- 共通UI ---------- */
 
 function openModal(element) {
+  if (state.modalStack.includes(element)) return;
+  state.focusBeforeModal = document.activeElement;
+  state.modalStack.push(element);
   element.classList.remove('hidden');
+  element.querySelector('button, input, select, textarea')?.focus();
 }
 
 function closeModal(element) {
   element.classList.add('hidden');
+  state.modalStack = state.modalStack.filter((item) => item !== element);
+  const top = state.modalStack[state.modalStack.length - 1];
+  if (top) {
+    top.querySelector('button, input, select, textarea')?.focus();
+  } else if (state.focusBeforeModal instanceof HTMLElement) {
+    state.focusBeforeModal.focus();
+    state.focusBeforeModal = null;
+  }
 }
 
 function showToast(message, duration = 3400) {
@@ -262,22 +278,27 @@ function openEditModal(item = null) {
 
 async function submitEdit(event) {
   event.preventDefault();
-  const name = byId('edit-name').value.trim();
-  const expiryDate = byId('edit-expiry').value;
-  if (!name || !isValidDate(expiryDate)) {
-    ui.editError.textContent = '食材名と賞味期限を入力してください。';
-    ui.editError.classList.remove('hidden');
-    return;
-  }
-
-  const fields = {
-    name,
-    storage: byId('edit-storage').value,
-    expiryDate,
-    quantity: byId('edit-quantity').value.trim(),
-  };
+  if (state.savingEdit) return;
+  state.savingEdit = true;
+  const submitButton = ui.editForm.querySelector('button[type="submit"]');
+  submitButton.disabled = true;
   try {
-    if (state.editingId) {
+    const name = byId('edit-name').value.trim();
+    const expiryDate = byId('edit-expiry').value;
+    if (!name || !isValidDate(expiryDate)) {
+      ui.editError.textContent = '食材名と賞味期限を入力してください。';
+      ui.editError.classList.remove('hidden');
+      return;
+    }
+
+    const fields = {
+      name,
+      storage: byId('edit-storage').value,
+      expiryDate,
+      quantity: byId('edit-quantity').value.trim(),
+    };
+    const wasEditing = Boolean(state.editingId);
+    if (wasEditing) {
       const original = state.items.find((item) => item.id === state.editingId);
       if (!original) throw new Error('編集対象が見つかりません。');
       await updateItem({ ...original, ...fields });
@@ -286,9 +307,12 @@ async function submitEdit(event) {
     }
     closeModal(ui.editModal);
     await refreshItems();
-    showToast(state.editingId ? '食材を更新しました。' : '食材を追加しました。');
+    showToast(wasEditing ? '食材を更新しました。' : '食材を追加しました。');
   } catch (error) {
     showToast(error.message || '保存に失敗しました。');
+  } finally {
+    state.savingEdit = false;
+    submitButton.disabled = false;
   }
 }
 
@@ -374,6 +398,12 @@ function registerPWAEvents() {
 
 function registerServiceWorker() {
   if (!('serviceWorker' in navigator)) return;
+  const hadController = Boolean(navigator.serviceWorker.controller);
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    if (!hadController || state.didReloadForUpdate) return;
+    state.didReloadForUpdate = true;
+    location.reload();
+  });
   window.addEventListener('load', () => {
     navigator.serviceWorker.register('/sw.js').catch(() => {
       // オフラインキャッシュが使えなくても、アプリ本体の利用は継続できる。
@@ -431,10 +461,26 @@ function wireEvents() {
     });
   }
   document.addEventListener('keydown', (event) => {
-    if (event.key !== 'Escape') return;
-    const openOverlays = [ui.settingsModal, ui.editModal, ui.resultModal, ui.sourceModal]
-      .filter((overlay) => !overlay.classList.contains('hidden'));
-    if (openOverlays.length) closeModal(openOverlays[0]);
+    const top = state.modalStack[state.modalStack.length - 1];
+    if (!top) return;
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      closeModal(top);
+      return;
+    }
+    if (event.key !== 'Tab') return;
+    const focusables = Array.from(top.querySelectorAll('button, input, select, textarea, [href]'))
+      .filter((element) => !element.disabled && element.offsetParent !== null);
+    if (!focusables.length) return;
+    const first = focusables[0];
+    const last = focusables[focusables.length - 1];
+    if (event.shiftKey && (document.activeElement === first || !top.contains(document.activeElement))) {
+      event.preventDefault();
+      last.focus();
+    } else if (!event.shiftKey && (document.activeElement === last || !top.contains(document.activeElement))) {
+      event.preventDefault();
+      first.focus();
+    }
   });
 
   registerPWAEvents();

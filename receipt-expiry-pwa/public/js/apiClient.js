@@ -1,5 +1,6 @@
 const ENDPOINT = '/api/analyze';
 const VALID_STORAGE = new Set(['fridge', 'freezer', 'pantry']);
+const MAX_ITEMS = 50;
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 
 /** /api/analyze へ画像を送信し、検証済みの解析結果を返す。 */
@@ -37,6 +38,7 @@ export function normalizeAnalysis(data) {
   const rawItems = Array.isArray(data?.items) ? data.items : [];
 
   for (const raw of rawItems) {
+    if (items.length >= MAX_ITEMS) break;
     if (!raw || typeof raw !== 'object') continue;
     const name = typeof raw.name === 'string' ? raw.name.trim().slice(0, 80) : '';
     if (!name) continue;

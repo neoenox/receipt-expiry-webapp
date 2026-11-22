@@ -1,10 +1,13 @@
 const MAX_IMAGE_CHARS = 2_800_000;
+const MAX_ITEMS = 50;
+const GEMINI_TIMEOUT_MS = 20_000;
 const RATE_PER_MINUTE = 5;
 const RATE_PER_DAY = 20;
 const VALID_STORAGE = new Set(['fridge', 'freezer', 'pantry']);
 
-// Cloudflareのアイソレートは短期間で破棄されるため、共有キー利用時のみの簡易制限。
-const rateBuckets = new Map();
+// Cloudflare では KV バインディングで全拠点共通のカウンタを使う。
+// バインディングがない OCI / ローカルではプロセス内カウンタにフォールバックする。
+const localRateBuckets = new Map();
 
 const responseSchema = {
   type: 'OBJECT',
@@ -63,27 +66,50 @@ function addDays(dateString, days) {
 }
 
 function clientIp(request) {
+  // X-Forwarded-For はクライアントが偽装できるため使わない。
   return request.headers.get('CF-Connecting-IP')
-    || request.headers.get('X-Forwarded-For')?.split(',')[0].trim()
+    || request.headers.get('X-Real-IP')
     || 'unknown';
 }
 
+function bucketKeys(ip, now) {
+  const minute = Math.floor(now / 60_000);
+  const day = new Date(now).toISOString().slice(0, 10);
+  return {
+    minuteKey: `rl:${ip}:m:${minute}`,
+    dayKey: `rl:${ip}:d:${day}`,
+    minuteTtl: 60,
+    dayTtl: 86_400,
+  };
+}
+
 /** 共有キー利用時のみ適用。BYOKはユーザー自身の枠なので制限しない。 */
-function isRateLimited(request) {
+async function isRateLimited(request, env) {
+  const ip = clientIp(request);
   const now = Date.now();
-  if (rateBuckets.size > 1000) {
-    for (const [key, bucket] of rateBuckets) {
-      if (bucket.minuteUntil < now && bucket.dayUntil < now) rateBuckets.delete(key);
+  const { minuteKey, dayKey, minuteTtl, dayTtl } = bucketKeys(ip, now);
+  const kv = env?.RATE_LIMIT_KV;
+
+  if (kv && typeof kv.get === 'function' && typeof kv.put === 'function') {
+    try {
+      const [minuteRaw, dayRaw] = await Promise.all([
+        kv.get(minuteKey),
+        kv.get(dayKey),
+      ]);
+      const minuteCount = Number(minuteRaw || 0) + 1;
+      const dayCount = Number(dayRaw || 0) + 1;
+      await Promise.all([
+        kv.put(minuteKey, String(minuteCount), { expirationTtl: minuteTtl }),
+        kv.put(dayKey, String(dayCount), { expirationTtl: dayTtl }),
+      ]);
+      return minuteCount > RATE_PER_MINUTE || dayCount > RATE_PER_DAY;
+    } catch {
+      // KV 障害時は解析そのものを止めない。
+      return false;
     }
   }
 
-  const ip = clientIp(request);
-  const bucket = rateBuckets.get(ip) || {
-    minuteCount: 0,
-    minuteUntil: now + 60_000,
-    dayCount: 0,
-    dayUntil: now + 86_400_000,
-  };
+  const bucket = localRateBuckets.get(ip) || { minuteCount: 0, minuteUntil: now + 60_000, dayCount: 0, dayUntil: now + 86_400_000 };
   if (now >= bucket.minuteUntil) {
     bucket.minuteCount = 0;
     bucket.minuteUntil = now + 60_000;
@@ -94,8 +120,12 @@ function isRateLimited(request) {
   }
   bucket.minuteCount += 1;
   bucket.dayCount += 1;
-  rateBuckets.set(ip, bucket);
-
+  if (localRateBuckets.size > 1000) {
+    for (const [key, value] of localRateBuckets) {
+      if (value.minuteUntil < now && value.dayUntil < now) localRateBuckets.delete(key);
+    }
+  }
+  localRateBuckets.set(ip, bucket);
   return bucket.minuteCount > RATE_PER_MINUTE || bucket.dayCount > RATE_PER_DAY;
 }
 
@@ -124,6 +154,7 @@ function normalizeAIResult(data, fallbackDate) {
   const items = [];
 
   for (const raw of rawItems) {
+    if (items.length >= MAX_ITEMS) break;
     if (!raw || typeof raw !== 'object') continue;
     const name = typeof raw.name === 'string' ? raw.name.trim().slice(0, 80) : '';
     if (!name) continue;
@@ -146,14 +177,13 @@ function extractJsonText(payload) {
 }
 
 async function geminiFailureMessage(response, usingCustomKey) {
-  let detail = '';
+  let reason = '';
   try {
     const payload = await response.json();
-    if (typeof payload?.error?.message === 'string') detail = payload.error.message.slice(0, 240);
+    if (typeof payload?.error?.message === 'string') reason = payload.error.message.toLowerCase();
   } catch {
     // エラー本文がJSONでない場合はステータスコードのみで判定する。
   }
-  const reason = detail.toLowerCase();
   if (response.status === 429 || reason.includes('quota') || reason.includes('resource_exhausted')) {
     return usingCustomKey
       ? '設定したGemini APIの利用上限に達しました。プランや課金設定を確認してください。'
@@ -165,7 +195,10 @@ async function geminiFailureMessage(response, usingCustomKey) {
   if (reason.includes('model') && reason.includes('not found')) {
     return '指定されたGeminiモデルが利用できません。APIキーの権限を確認してください。';
   }
-  return detail ? `AIがリクエストを拒否しました: ${detail}` : 'AIがリクエストを受理しませんでした。APIキーを確認してください。';
+  // 上流のエラー本文は内部情報を含み得るためクライアントへ返さない。
+  return usingCustomKey
+    ? '設定したGemini APIキーでリクエストが拒否されました。キーと権限を確認してください。'
+    : 'AIがリクエストを受理しませんでした。しばらくして再度お試しください。';
 }
 
 
@@ -209,20 +242,26 @@ export async function onRequestPost(context) {
   if (!apiKey) {
     return errorResponse(500, 'API_KEY_NOT_CONFIGURED', '解析用のAPIキーが未設定です。設定画面からご自身のGemini APIキーを登録するか、運用者に共通キーの設定を依頼してください。');
   }
-  if (!customApiKey && isRateLimited(request)) {
+  if (!customApiKey && await isRateLimited(request, env)) {
     return errorResponse(429, 'RATE_LIMIT_EXCEEDED', '解析リクエストの上限に達しました。しばらく待つか、設定画面からご自身のAPIキーをご利用ください。');
   }
 
   const clientDate = isValidDateString(body.clientDate) ? body.clientDate : todayString();
   const mimeType = body.mimeType === 'image/png' ? 'image/png' : 'image/jpeg';
 
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), GEMINI_TIMEOUT_MS);
   let geminiResponse;
   try {
     geminiResponse = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${encodeURIComponent(apiKey)}`,
+      'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent',
       {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        signal: controller.signal,
+        headers: {
+          'Content-Type': 'application/json',
+          'x-goog-api-key': apiKey,
+        },
         body: JSON.stringify({
           contents: [{
             role: 'user',
@@ -240,6 +279,8 @@ export async function onRequestPost(context) {
     );
   } catch {
     return errorResponse(502, 'AI_UNAVAILABLE', 'AIサービスに接続できませんでした。しばらくして再度お試しください。');
+  } finally {
+    clearTimeout(timeout);
   }
 
   if (!geminiResponse.ok) {

@@ -1,5 +1,5 @@
 const DB_NAME = 'ReceiptExpiryDB';
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 const STORE_NAME = 'food_items';
 
 let dbPromise = null;
@@ -24,6 +24,9 @@ export function initDB() {
         }
         if (!store.indexNames.contains('idx_storage')) {
           store.createIndex('idx_storage', 'storage');
+        }
+        if (!store.indexNames.contains('idx_expiry_created')) {
+          store.createIndex('idx_expiry_created', ['expiryDate', 'createdAt']);
         }
       };
 
@@ -73,30 +76,26 @@ function newId() {
 export function addItemsBulk(items) {
   const now = Date.now();
   return withStore('readwrite', (store) => {
-    for (const item of items) {
+    for (const [index, item] of items.entries()) {
       store.put({
         ...item,
         id: newId(),
-        createdAt: now,
+        createdAt: now + index,
       });
     }
   });
 }
 
-/** 賞味期限の昇順（近い順）で全件返す。 */
+/** 賞味期限→登録日時の順で全件返す。 */
 export function getAllItemsSorted() {
   return withStore('readonly', (store, setResult) => {
-    const request = store.getAll();
+    const request = store.index('idx_expiry_created').getAll();
     request.onsuccess = () => {
-      setResult(request.result.slice().sort(compareByExpiry));
+      setResult(request.result);
     };
   });
 }
 
-function compareByExpiry(a, b) {
-  if (a.expiryDate === b.expiryDate) return (a.createdAt || 0) - (b.createdAt || 0);
-  return a.expiryDate < b.expiryDate ? -1 : 1;
-}
 
 export function updateItem(item) {
   return withStore('readwrite', (store) => {

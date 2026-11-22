@@ -33,7 +33,9 @@ mkdir -p "$APP_DIR"
 cp -r "$REPO_ROOT/public" "$REPO_ROOT/functions" "$REPO_ROOT/oci" "$REPO_ROOT/package.json" "$APP_DIR/"
 
 install -m 600 /dev/null /etc/receipt-expiry.env
-printf 'GEMINI_API_KEY=%s\n' "$API_KEY" > /etc/receipt-expiry.env
+ESCAPED_KEY=${API_KEY//\\/\\\\}
+ESCAPED_KEY=${ESCAPED_KEY//\"/\\\"}
+printf 'GEMINI_API_KEY="%s"\n' "$ESCAPED_KEY" > /etc/receipt-expiry.env
 
 install -m 644 "$APP_DIR/oci/receipt-expiry.service" /etc/systemd/system/receipt-expiry.service
 sed "s/YOUR_DOMAIN/${DOMAIN}/g" "$APP_DIR/oci/nginx.conf" > /etc/nginx/sites-available/receipt-expiry
