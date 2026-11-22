@@ -86,6 +86,20 @@ test('blocks the sixth shared-key request using the KV counter', async (t) => {
   assert.equal((await last.json()).error.code, 'RATE_LIMIT_EXCEEDED');
 });
 
+test('fails closed when rate-limit KV reads or writes fail', async () => {
+  for (const rateLimitKV of [
+    { async get() { throw new Error('KV read failed'); }, async put() {} },
+    { async get() { return null; }, async put() { throw new Error('KV write failed'); } },
+  ]) {
+    const response = await onRequestPost({
+      request: makeRequest({ imageBase64: VALID_IMAGE }, { ip: '203.0.113.30' }),
+      env: { GEMINI_API_KEY: 'shared-key', RATE_LIMIT_KV: rateLimitKV },
+    });
+    assert.equal(response.status, 503);
+    assert.equal((await response.json()).error.code, 'RATE_LIMIT_UNAVAILABLE');
+  }
+});
+
 test('sends the key in a header and caps normalized items at 50', async (t) => {
   let captured;
   withMockFetch(t, async (url, options) => {
