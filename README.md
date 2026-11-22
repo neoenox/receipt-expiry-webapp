@@ -44,4 +44,4 @@ Cloudflare では `wrangler.toml` の `RATE_LIMIT_KV` バインディング（KV
 
 ## ブランチ保護
 
-`main` は PR 経由のマージのみ、`ci` チェック成功が必須、force push と削除は禁止です。
+`main` は PR 経由のマージのみ、`ci` チェック成功が必須、force push と削除は禁止です。GitHub では PR 作成者が自分の PR を承認できないため、承認要件は 0 件（作成者が `ci` 通過後に自分でマージ可能）です。
