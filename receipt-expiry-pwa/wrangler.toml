@@ -10,6 +10,12 @@ id = "b84c378910734fcb961fa5f18d0fbed3"
 binding = "PUSH_KV"
 id = "144d3da77b74483f92a3397b0bf5647e"
 
+
+[[durable_objects.bindings]]
+name = "RATE_LIMITER_DO"
+class_name = "RateLimiter"
+script_name = "receipt-expiry-ratelimiter"
+
 [vars]
 VAPID_PUBLIC_KEY = "BBH70Vd1epc-FBv8gqa8ZrwgLMcXqJMq4eTHzloq7NW_9oBkqriptpJ100zUK_7oDv9Pb6_qLE64gxPtIJObuFk"
 
@@ -25,3 +31,9 @@ id = "144d3da77b74483f92a3397b0bf5647e"
 
 [env.production.vars]
 VAPID_PUBLIC_KEY = "BBH70Vd1epc-FBv8gqa8ZrwgLMcXqJMq4eTHzloq7NW_9oBkqriptpJ100zUK_7oDv9Pb6_qLE64gxPtIJObuFk"
+
+[[env.production.durable_objects.bindings]]
+name = "RATE_LIMITER_DO"
+class_name = "RateLimiter"
+script_name = "receipt-expiry-ratelimiter"
+

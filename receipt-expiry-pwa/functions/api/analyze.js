@@ -87,6 +87,23 @@ function bucketKeys(ip, now) {
 async function isRateLimited(request, env) {
   const ip = clientIp(request);
   const now = Date.now();
+
+  const durable = env?.RATE_LIMITER_DO;
+  if (durable && typeof durable.idFromName === 'function') {
+    try {
+      const id = durable.idFromName(ip);
+      const stub = durable.get(id);
+      const response = await stub.fetch('https://rate-limiter/', {
+        method: 'POST',
+        body: JSON.stringify({ now }),
+      });
+      const result = await response.json();
+      return Boolean(result.limited);
+    } catch {
+      throw new Error('RATE_LIMIT_STORAGE_UNAVAILABLE');
+    }
+  }
+
   const { minuteKey, dayKey, minuteTtl, dayTtl } = bucketKeys(ip, now);
   const kv = env?.RATE_LIMIT_KV;
 

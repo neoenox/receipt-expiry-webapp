@@ -65,3 +65,13 @@ Cloudflare では `wrangler.toml` の `RATE_LIMIT_KV` バインディング（KV
 - CI が Pages と通知 Worker の両方をデプロイし、Playwright の E2E テストも実行
 - テスト: `node --test tests/*.js` と `npm run test:e2e`
 
+
+さらに:
+
+- BYOK キーは保存前に `/api/validate-key` で Gemini へ検証し、無効キーを保存しない
+- オフラインキューは設定画面で個別再試行・削除が可能（最大3回）
+- 共有キーのレート制限は Durable Object で厳密にカウント（KV はフォールバック）
+- E2E にオフラインキューを追加、ダークモード（`prefers-color-scheme`）に対応
+- CI が `ratelimit-worker` もデプロイ
+
+

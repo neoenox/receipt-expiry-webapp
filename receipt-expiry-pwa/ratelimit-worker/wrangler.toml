@@ -1,0 +1,11 @@
+name = "receipt-expiry-ratelimiter"
+main = "index.js"
+compatibility_date = "2026-11-22"
+
+[[durable_objects.bindings]]
+name = "RATE_LIMITER"
+class_name = "RateLimiter"
+
+[[migrations]]
+tag = "v1"
+new_classes = ["RateLimiter"]
