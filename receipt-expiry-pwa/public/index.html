@@ -156,8 +156,26 @@
 
 
       <section class="settings-section">
+        <h3>Gemini API キーの取得方法</h3>
+        <p class="hint">解析にはGemini APIキーが必要です。Googleアカウントがあれば無料で取得できます。</p>
+        <details id="key-guide" class="guide-details">
+          <summary>手順をみる（タップで開く）</summary>
+          <ol class="guide">
+            <li>Googleアカウントで <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">Google AI Studio</a> を開く</li>
+            <li>初回は利用規約に同意する</li>
+            <li>「API Keys」→「Create API key（API キーを作成）」を押す</li>
+            <li>既存のGoogle Cloudプロジェクトを使う場合は、先に取り込んでから選択する</li>
+            <li>表示された <code>AIza...</code> の文字列をコピーし、下のBYOK欄に貼り付けて「保存」を押す</li>
+          </ol>
+          <p class="guide-note">2026-05-28以降の新規キーはGemini API専用の認証キーです。古い「Unrestricted」キーは拒否されるため、「Restrict to Gemini API only」を設定するか新規作成してください。</p>
+          <p class="guide-note">利用量は <a href="https://aistudio.google.com/usage" target="_blank" rel="noopener">Usage ページ</a> で確認できます。上限に達すると解析が429エラーになります。</p>
+        </details>
+      </section>
+
+
+      <section class="settings-section">
         <h3>自分のGemini APIキーを使う（BYOK）</h3>
-        <p class="hint">キーを登録すると共有の利用制限なしで解析できます。キーはこの端末の localStorage にのみ保存され、サーバーには保存されません。</p>
+        <p class="hint">キーを登録すると共有の利用制限なしで解析できます。キーはこの端末の localStorage にのみ保存され、サーバーには保存されません。取得方法は上の「Gemini API キーの取得方法」を参照してください。</p>
         <label class="field">Gemini API キー
           <input id="api-key-input" type="password" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="AIzaSy...">
         </label>
