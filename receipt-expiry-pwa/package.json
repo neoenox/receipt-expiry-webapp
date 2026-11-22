@@ -5,5 +5,8 @@
   "type": "module",
   "scripts": {
     "start": "node oci/server.js"
+  },
+  "devDependencies": {
+    "web-push": "^4.0.0"
   }
 }

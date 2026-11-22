@@ -1,10 +1,14 @@
-import { initDB, addItemsBulk, getAllItems, getAllItemsSorted, importItems, updateItem, deleteItem } from './db.js';
+import { initDB, addItemsBulk, getAllItems, getAllItemsSorted, importItems, updateItem, deleteItem, enqueueAnalysis, listQueuedAnalyses, updateQueuedAnalysis, deleteQueuedAnalysis, addConsumption, listConsumption, saveExpiryHint, listExpiryHints } from './db.js';
 import { processReceiptImage } from './imageProcessor.js';
 import { analyzeReceipt, isValidDate } from './apiClient.js';
 import { serializeBackup, parseBackup } from './backup.js';
+import { createQueuedAnalysis, nextAttempt, shouldDiscard } from './queue.js';
+import { createConsumption, summarizeHistory } from './history.js';
+import { createExpiryHint, buildHintMap, normalizeFoodName } from './learning.js';
 
 const STORAGE_LABELS = { fridge: '冷蔵', freezer: '冷凍', pantry: '常温' };
 const BYOK_STORAGE_KEY = 'receipt-expiry-gemini-key';
+const NOTIFY_STORAGE_KEY = 'receipt-expiry-notify';
 
 const byId = (id) => document.getElementById(id);
 const ui = {
@@ -34,6 +38,16 @@ const ui = {
   importBackupBtn: byId('import-backup-btn'),
   backupInput: byId('backup-input'),
   backupStatus: byId('backup-status'),
+
+  queueStatus: byId('queue-status'),
+  retryQueueBtn: byId('retry-queue-btn'),
+  historySummary: byId('history-summary'),
+
+  notifyEnableBtn: byId('notify-enable-btn'),
+  notifyDisableBtn: byId('notify-disable-btn'),
+  notifyStatus: byId('notify-status'),
+  consumeModal: byId('consume-modal'),
+  consumeItem: byId('consume-item'),
   cameraInput: byId('camera-input'),
   galleryInput: byId('gallery-input'),
   itemTemplate: byId('item-card-template'),
@@ -52,6 +66,12 @@ const state = {
   focusBeforeModal: null,
   savingEdit: false,
   didReloadForUpdate: false,
+
+  processingQueue: false,
+  consumeTarget: null,
+  expiryHints: new Map(),
+
+  syncingPush: false,
 };
 
 /* ---------- 日付・ステータス ---------- */
@@ -133,6 +153,8 @@ function showLoading(visible) {
 async function refreshItems() {
   state.items = await getAllItemsSorted();
   renderList();
+
+  void syncPushReminder();
 }
 
 function renderList() {
@@ -189,26 +211,71 @@ function handleFileSelected(event) {
   if (file) void analyzeFile(file);
 }
 
+async function submitAnalysis(payload) {
+  const result = await analyzeReceipt({ ...payload, customApiKey: getApiKey() || undefined });
+  if (result.items.length === 0) {
+    showToast('食材が見つかりませんでした。別の画像をお試しください。');
+    return;
+  }
+  openResultModal(result);
+}
+
 async function analyzeFile(file) {
   closeModal(ui.sourceModal);
   showLoading(true);
   try {
     const { base64, mimeType } = await processReceiptImage(file);
-    const result = await analyzeReceipt({
-      imageBase64: base64,
-      mimeType,
-      clientDate: todayISO(),
-      customApiKey: getApiKey() || undefined,
-    });
-    if (result.items.length === 0) {
-      showToast('食材が見つかりませんでした。別の画像をお試しください。');
+    const payload = { imageBase64: base64, mimeType, clientDate: todayISO() };
+    if (!navigator.onLine) {
+      await enqueueAnalysis(createQueuedAnalysis(payload));
+      await refreshQueueStatus();
+      showToast('オフラインです。接続が戻ったら自動で解析します。');
       return;
     }
-    openResultModal(result);
+    await submitAnalysis(payload);
   } catch (error) {
     showToast(error.message || '解析に失敗しました。');
   } finally {
     showLoading(false);
+  }
+}
+
+async function refreshQueueStatus() {
+  const jobs = await listQueuedAnalyses();
+  ui.queueStatus.textContent = jobs.length ? `未送信の解析: ${jobs.length}件` : '未送信の解析はありません。';
+  ui.retryQueueBtn.disabled = jobs.length === 0;
+}
+
+async function processQueue() {
+  if (state.processingQueue) return;
+  state.processingQueue = true;
+  try {
+    const jobs = await listQueuedAnalyses();
+    for (const job of jobs) {
+      try {
+        await submitAnalysis({
+          imageBase64: job.imageBase64,
+          mimeType: job.mimeType,
+          clientDate: job.clientDate,
+        });
+        await deleteQueuedAnalysis(job.id);
+      } catch (error) {
+        const attempted = nextAttempt(job);
+        if (shouldDiscard(attempted)) {
+          await deleteQueuedAnalysis(job.id);
+          showToast('解析できなかったレシートを削除しました。');
+        } else {
+          await updateQueuedAnalysis(attempted);
+          showToast(`再試行できませんでした: ${error.message || '不明なエラー'}`);
+        }
+        break;
+      }
+    }
+    await refreshQueueStatus();
+  } catch (error) {
+    console.error('[queue]', error);
+  } finally {
+    state.processingQueue = false;
   }
 }
 
@@ -218,7 +285,8 @@ function createResultRow(item = {}) {
   const row = ui.rowTemplate.content.firstElementChild.cloneNode(true);
   row.querySelector('.field-name').value = item.name || '';
   row.querySelector('.field-storage').value = item.storage || 'fridge';
-  row.querySelector('.field-expiry').value = item.expiryDate || defaultExpiryISO();
+  const hint = state.expiryHints.get(normalizeFoodName(item.name || ''));
+  row.querySelector('.field-expiry').value = item.expiryDate || hint || defaultExpiryISO();
   row.querySelector('.field-quantity').value = item.quantity || '';
   return row;
 }
@@ -308,6 +376,8 @@ async function submitEdit(event) {
       const original = state.items.find((item) => item.id === state.editingId);
       if (!original) throw new Error('編集対象が見つかりません。');
       await updateItem({ ...original, ...fields });
+      await saveExpiryHint(createExpiryHint(fields.name, fields.expiryDate));
+      state.expiryHints.set(normalizeFoodName(fields.name), fields.expiryDate);
     } else {
       await addItemsBulk([{ ...fields, purchaseDate: todayISO() }]);
     }
@@ -322,16 +392,136 @@ async function submitEdit(event) {
   }
 }
 
-async function removeEditedItem() {
+function removeEditedItem() {
   if (!state.editingId) return;
-  if (!window.confirm('この食材を消費済みとして削除しますか？')) return;
+  const item = state.items.find((entry) => entry.id === state.editingId);
+  if (!item) return;
+  state.consumeTarget = item;
+  ui.consumeItem.textContent = `${item.name}（${item.expiryDate}）`;
+  openModal(ui.consumeModal);
+}
+
+async function finishConsume(reason) {
+  const item = state.consumeTarget;
+  if (!item) return;
   try {
-    await deleteItem(state.editingId);
+    await addConsumption(createConsumption(item, reason));
+    await deleteItem(item.id);
+    state.consumeTarget = null;
+    closeModal(ui.consumeModal);
     closeModal(ui.editModal);
     await refreshItems();
-    showToast('削除しました。');
+    await refreshHistorySummary();
+    showToast(reason === 'eaten' ? '食べたとして記録しました。' : '捨てたとして記録しました。');
   } catch (error) {
-    showToast(error.message || '削除に失敗しました。');
+    showToast(error.message || '記録に失敗しました。');
+  }
+}
+
+async function refreshHistorySummary() {
+  const entries = await listConsumption();
+  const summary = summarizeHistory(entries);
+  ui.historySummary.textContent = `今月: 食べた ${summary.eaten}件 / 捨てた ${summary.discarded}件（合計 ${summary.total}件）`;
+}
+
+function isNotifyEnabled() {
+  try {
+    return localStorage.getItem(NOTIFY_STORAGE_KEY) === '1';
+  } catch {
+    return false;
+  }
+}
+
+function refreshNotifyStatus() {
+  if (!('Notification' in window) || !('serviceWorker' in navigator) || !('PushManager' in window)) {
+    ui.notifyStatus.textContent = 'このブラウザはプッシュ通知に対応していません。';
+    return;
+  }
+  ui.notifyStatus.textContent = isNotifyEnabled()
+    ? `通知を有効にしています（${Notification.permission}）。`
+    : '通知は無効です。';
+}
+
+function urlBase64ToUint8Array(base64String) {
+  const padding = '='.repeat((4 - (base64String.length % 4)) % 4);
+  const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
+  const raw = atob(base64);
+  return Uint8Array.from(raw, (char) => char.charCodeAt(0));
+}
+
+async function enableNotifications() {
+  try {
+    if (!('Notification' in window) || !('serviceWorker' in navigator) || !('PushManager' in window)) {
+      ui.notifyStatus.textContent = 'このブラウザはプッシュ通知に対応していません。';
+      return;
+    }
+    const permission = await Notification.requestPermission();
+    if (permission !== 'granted') {
+      ui.notifyStatus.textContent = '通知が許可されませんでした。ブラウザ設定で許可してください。';
+      return;
+    }
+    const config = await fetch('/api/push/config').then((response) => response.json());
+    if (!config.publicKey) throw new Error('通知の設定を取得できませんでした。');
+    const registration = await navigator.serviceWorker.ready;
+    let subscription = await registration.pushManager.getSubscription();
+    if (!subscription) {
+      subscription = await registration.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: urlBase64ToUint8Array(config.publicKey),
+      });
+    }
+    localStorage.setItem(NOTIFY_STORAGE_KEY, '1');
+    await syncPushReminder();
+    refreshNotifyStatus();
+    showToast('賞味期限の通知を有効にしました。');
+  } catch (error) {
+    ui.notifyStatus.textContent = error.message || '通知を有効にできませんでした。';
+    showToast('通知を有効にできませんでした。');
+  }
+}
+
+async function disableNotifications() {
+  try {
+    if ('serviceWorker' in navigator) {
+      const registration = await navigator.serviceWorker.ready;
+      const subscription = await registration.pushManager.getSubscription();
+      if (subscription) {
+        await fetch('/api/push/unsubscribe', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ endpoint: subscription.endpoint }),
+        });
+        await subscription.unsubscribe();
+      }
+    }
+    localStorage.removeItem(NOTIFY_STORAGE_KEY);
+    refreshNotifyStatus();
+    showToast('通知を無効にしました。');
+  } catch (error) {
+    showToast(error.message || '通知を無効にできませんでした。');
+  }
+}
+
+async function syncPushReminder() {
+  if (state.syncingPush || !isNotifyEnabled()) return;
+  state.syncingPush = true;
+  try {
+    const registration = await navigator.serviceWorker.ready;
+    const subscription = await registration.pushManager.getSubscription();
+    if (!subscription) return;
+    const dates = state.items
+      .map((item) => item.expiryDate)
+      .filter((date) => isValidDate(date))
+      .sort();
+    await fetch('/api/push/subscribe', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ subscription: subscription.toJSON(), nextExpiry: dates[0] || null }),
+    });
+  } catch {
+    // 通知の同期失敗は在庫操作を止めない。
+  } finally {
+    state.syncingPush = false;
   }
 }
 
@@ -355,6 +545,9 @@ function refreshApiKeyStatus() {
 function openSettings() {
   refreshApiKeyStatus();
   ui.backupStatus.textContent = '';
+  refreshNotifyStatus();
+  void refreshQueueStatus();
+  void refreshHistorySummary();
   openModal(ui.settingsModal);
 }
 
@@ -484,6 +677,18 @@ function wireEvents() {
   byId('edit-cancel').addEventListener('click', () => closeModal(ui.editModal));
   ui.editDelete.addEventListener('click', () => void removeEditedItem());
 
+
+  byId('consume-eaten').addEventListener('click', () => void finishConsume('eaten'));
+  byId('consume-discarded').addEventListener('click', () => void finishConsume('discarded'));
+  byId('consume-cancel').addEventListener('click', () => {
+    state.consumeTarget = null;
+    closeModal(ui.consumeModal);
+  });
+  ui.retryQueueBtn.addEventListener('click', () => void processQueue());
+  window.addEventListener('online', () => void processQueue());
+
+  ui.notifyEnableBtn.addEventListener('click', () => void enableNotifications());
+  ui.notifyDisableBtn.addEventListener('click', () => void disableNotifications());
   byId('save-api-key').addEventListener('click', saveApiKey);
   byId('clear-api-key').addEventListener('click', clearApiKey);
 
@@ -504,7 +709,7 @@ function wireEvents() {
     renderList();
   });
 
-  for (const overlay of [ui.sourceModal, ui.resultModal, ui.editModal, ui.settingsModal]) {
+  for (const overlay of [ui.sourceModal, ui.resultModal, ui.editModal, ui.consumeModal, ui.settingsModal]) {
     overlay.addEventListener('click', (event) => {
       if (event.target === overlay) closeModal(overlay);
     });
@@ -540,6 +745,13 @@ async function init() {
   registerServiceWorker();
   try {
     await initDB();
+
+    state.expiryHints = buildHintMap(await listExpiryHints());
+    await refreshQueueStatus();
+
+    await syncPushReminder();
+    await refreshHistorySummary();
+    await processQueue();
     await refreshItems();
   } catch (error) {
     showToast(error.message || '在庫を読み込めませんでした。');

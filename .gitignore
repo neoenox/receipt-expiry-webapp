@@ -1,6 +1,7 @@
 node_modules/
 .wrangler/
 .ci-functions-build/
+.ci-worker-build/
 .env
 .env.*
 *.log

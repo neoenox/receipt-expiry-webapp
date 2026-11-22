@@ -1,5 +1,5 @@
 const CACHE_PREFIX = 'receipt-expiry-';
-const CACHE_NAME = `${CACHE_PREFIX}v3`;
+const CACHE_NAME = `${CACHE_PREFIX}v5`;
 const STATIC_ASSETS = [
   '/',
   '/index.html',
@@ -8,6 +8,9 @@ const STATIC_ASSETS = [
   '/js/app.js',
   '/js/db.js',
   '/js/backup.js',
+  '/js/queue.js',
+  '/js/history.js',
+  '/js/learning.js',
   '/js/imageProcessor.js',
   '/js/apiClient.js',
   '/icons/icon-192.png',
@@ -86,4 +89,23 @@ self.addEventListener('fetch', (event) => {
   if (url.pathname.startsWith('/api/')) return;
 
   event.respondWith(isNetworkFirst(url) ? networkFirst(request) : cacheFirst(request));
+});
+
+self.addEventListener('push', (event) => {
+  let payload = {};
+  try {
+    payload = event.data ? event.data.json() : {};
+  } catch {
+    // ペイロードがJSONでない場合は既定の文言を使う。
+  }
+  event.waitUntil(self.registration.showNotification(payload.title || 'レシート賞味期限', {
+    body: payload.body || '賞味期限を確認してください。',
+    icon: '/icons/icon-192.png',
+    data: { url: payload.url || '/' },
+  }));
+});
+
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close();
+  event.waitUntil(clients.openWindow(event.notification.data?.url || '/'));
 });
