@@ -1,6 +1,7 @@
-import { initDB, addItemsBulk, getAllItemsSorted, updateItem, deleteItem } from './db.js';
+import { initDB, addItemsBulk, getAllItems, getAllItemsSorted, importItems, updateItem, deleteItem } from './db.js';
 import { processReceiptImage } from './imageProcessor.js';
 import { analyzeReceipt, isValidDate } from './apiClient.js';
+import { serializeBackup, parseBackup } from './backup.js';
 
 const STORAGE_LABELS = { fridge: '冷蔵', freezer: '冷凍', pantry: '常温' };
 const BYOK_STORAGE_KEY = 'receipt-expiry-gemini-key';
@@ -28,6 +29,11 @@ const ui = {
   installBtn: byId('install-btn'),
   apiKeyInput: byId('api-key-input'),
   apiKeyStatus: byId('api-key-status'),
+
+  exportBackupBtn: byId('export-backup-btn'),
+  importBackupBtn: byId('import-backup-btn'),
+  backupInput: byId('backup-input'),
+  backupStatus: byId('backup-status'),
   cameraInput: byId('camera-input'),
   galleryInput: byId('gallery-input'),
   itemTemplate: byId('item-card-template'),
@@ -348,6 +354,7 @@ function refreshApiKeyStatus() {
 
 function openSettings() {
   refreshApiKeyStatus();
+  ui.backupStatus.textContent = '';
   openModal(ui.settingsModal);
 }
 
@@ -372,6 +379,43 @@ function clearApiKey() {
     ui.apiKeyStatus.textContent = 'APIキーを削除しました。共通キーに戻ります。';
   } catch {
     ui.apiKeyStatus.textContent = 'このブラウザではキーを削除できません。';
+  }
+}
+
+async function exportBackup() {
+  try {
+    const items = await getAllItems();
+    const blob = new Blob([serializeBackup(items)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `receipt-expiry-backup-${todayISO()}.json`;
+    document.body.append(link);
+    link.click();
+    link.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    ui.backupStatus.textContent = `${items.length}件を書き出しました。`;
+    showToast('バックアップを書き出しました。');
+  } catch (error) {
+    ui.backupStatus.textContent = error.message || '書き出しに失敗しました。';
+    showToast(error.message || '書き出しに失敗しました。');
+  }
+}
+
+async function handleBackupFileSelected(event) {
+  const input = event.currentTarget;
+  const file = input.files?.[0];
+  input.value = '';
+  if (!file) return;
+  try {
+    const items = parseBackup(await file.text());
+    await importItems(items);
+    await refreshItems();
+    ui.backupStatus.textContent = `${items.length}件を読み込みました。`;
+    showToast(`${items.length}件の在庫を読み込みました。`);
+  } catch (error) {
+    ui.backupStatus.textContent = error.message || '読み込みに失敗しました。';
+    showToast(error.message || '読み込みに失敗しました。');
   }
 }
 
@@ -442,6 +486,11 @@ function wireEvents() {
 
   byId('save-api-key').addEventListener('click', saveApiKey);
   byId('clear-api-key').addEventListener('click', clearApiKey);
+
+
+  ui.exportBackupBtn.addEventListener('click', () => void exportBackup());
+  ui.importBackupBtn.addEventListener('click', () => ui.backupInput.click());
+  ui.backupInput.addEventListener('change', handleBackupFileSelected);
 
   ui.tabs.addEventListener('click', (event) => {
     const tab = event.target.closest('.tab');

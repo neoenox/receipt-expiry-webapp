@@ -96,6 +96,25 @@ export function getAllItemsSorted() {
   });
 }
 
+/** バックアップ書き出し用に全件をそのまま返す。 */
+export function getAllItems() {
+  return withStore('readonly', (store, setResult) => {
+    const request = store.getAll();
+    request.onsuccess = () => {
+      setResult(request.result || []);
+    };
+  });
+}
+
+/** IDが同じレコードは渡された内容で上書きし、それ以外は残す。 */
+export function importItems(items) {
+  return withStore('readwrite', (store) => {
+    for (const item of items) {
+      store.put(item);
+    }
+  });
+}
+
 
 export function updateItem(item) {
   return withStore('readwrite', (store) => {
