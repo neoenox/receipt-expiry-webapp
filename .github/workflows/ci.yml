@@ -22,6 +22,10 @@ jobs:
         with:
           node-version: '22'
 
+
+      - name: Install dependencies
+        working-directory: receipt-expiry-pwa
+        run: npm ci
       - name: Check JavaScript syntax
         working-directory: receipt-expiry-pwa
         run: find . -name '*.js' -not -path './node_modules/*' -print0 | xargs -0 -n1 node --check
@@ -36,6 +40,10 @@ jobs:
         working-directory: receipt-expiry-pwa
         run: npx --yes wrangler@4 pages functions build functions --outdir .ci-functions-build --project-directory .
 
+
+      - name: Build notification worker
+        working-directory: receipt-expiry-pwa/notify-worker
+        run: npx --yes wrangler@4 deploy --dry-run --outdir .ci-worker-build
       - name: Run tests
         working-directory: receipt-expiry-pwa
         run: node --test tests/*.js

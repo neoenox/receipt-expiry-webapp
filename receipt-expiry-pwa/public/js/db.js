@@ -1,6 +1,11 @@
 const DB_NAME = 'ReceiptExpiryDB';
-const DB_VERSION = 2;
-const STORE_NAME = 'food_items';
+const DB_VERSION = 5;
+const STORE = {
+  items: 'food_items',
+  queue: 'analysisQueue',
+  history: 'consumptionHistory',
+  hints: 'expiryHints',
+};
 
 let dbPromise = null;
 
@@ -16,17 +21,27 @@ export function initDB() {
 
       request.onupgradeneeded = () => {
         const db = request.result;
-        const store = db.objectStoreNames.contains(STORE_NAME)
-          ? request.transaction.objectStore(STORE_NAME)
-          : db.createObjectStore(STORE_NAME, { keyPath: 'id' });
-        if (!store.indexNames.contains('idx_expiryDate')) {
-          store.createIndex('idx_expiryDate', 'expiryDate');
+        const items = db.objectStoreNames.contains(STORE.items)
+          ? request.transaction.objectStore(STORE.items)
+          : db.createObjectStore(STORE.items, { keyPath: 'id' });
+        if (!items.indexNames.contains('idx_expiryDate')) {
+          items.createIndex('idx_expiryDate', 'expiryDate');
         }
-        if (!store.indexNames.contains('idx_storage')) {
-          store.createIndex('idx_storage', 'storage');
+        if (!items.indexNames.contains('idx_storage')) {
+          items.createIndex('idx_storage', 'storage');
         }
-        if (!store.indexNames.contains('idx_expiry_created')) {
-          store.createIndex('idx_expiry_created', ['expiryDate', 'createdAt']);
+        if (!items.indexNames.contains('idx_expiry_created')) {
+          items.createIndex('idx_expiry_created', ['expiryDate', 'createdAt']);
+        }
+        if (!db.objectStoreNames.contains(STORE.queue)) {
+          db.createObjectStore(STORE.queue, { keyPath: 'id' });
+        }
+        if (!db.objectStoreNames.contains(STORE.history)) {
+          const history = db.createObjectStore(STORE.history, { keyPath: 'id' });
+          history.createIndex('idx_consumedAt', 'consumedAt');
+        }
+        if (!db.objectStoreNames.contains(STORE.hints)) {
+          db.createObjectStore(STORE.hints, { keyPath: 'name' });
         }
       };
 
@@ -48,10 +63,10 @@ export function initDB() {
 }
 
 /** トランザクション完了を待ってresolveする。setResultは読み取り結果の受け渡しに使う。 */
-function withStore(mode, callback) {
+function withStore(mode, callback, storeName = STORE.items) {
   return initDB().then((db) => new Promise((resolve, reject) => {
-    const tx = db.transaction(STORE_NAME, mode);
-    const store = tx.objectStore(STORE_NAME);
+    const tx = db.transaction(storeName, mode);
+    const store = tx.objectStore(storeName);
     let result;
     tx.oncomplete = () => resolve(result);
     tx.onerror = () => reject(tx.error || new Error('データベース処理に失敗しました。'));
@@ -72,58 +87,88 @@ function newId() {
   return `id-${Date.now()}-${Math.random().toString(16).slice(2)}`;
 }
 
-/** 配列の全アイテムにIDと登録日時を付与し、1トランザクションで保存する。 */
+/* ---------- 在庫 ---------- */
+
 export function addItemsBulk(items) {
   const now = Date.now();
   return withStore('readwrite', (store) => {
     for (const [index, item] of items.entries()) {
-      store.put({
-        ...item,
-        id: newId(),
-        createdAt: now + index,
-      });
+      store.put({ ...item, id: newId(), createdAt: now + index });
     }
   });
 }
 
-/** 賞味期限→登録日時の順で全件返す。 */
 export function getAllItemsSorted() {
   return withStore('readonly', (store, setResult) => {
     const request = store.index('idx_expiry_created').getAll();
-    request.onsuccess = () => {
-      setResult(request.result);
-    };
+    request.onsuccess = () => { setResult(request.result); };
   });
 }
 
-/** バックアップ書き出し用に全件をそのまま返す。 */
 export function getAllItems() {
   return withStore('readonly', (store, setResult) => {
     const request = store.getAll();
-    request.onsuccess = () => {
-      setResult(request.result || []);
-    };
+    request.onsuccess = () => { setResult(request.result || []); };
   });
 }
 
-/** IDが同じレコードは渡された内容で上書きし、それ以外は残す。 */
 export function importItems(items) {
   return withStore('readwrite', (store) => {
-    for (const item of items) {
-      store.put(item);
-    }
+    for (const item of items) store.put(item);
   });
 }
 
-
 export function updateItem(item) {
-  return withStore('readwrite', (store) => {
-    store.put(item);
-  });
+  return withStore('readwrite', (store) => { store.put(item); });
 }
 
 export function deleteItem(id) {
-  return withStore('readwrite', (store) => {
-    store.delete(id);
-  });
+  return withStore('readwrite', (store) => { store.delete(id); });
+}
+
+/* ---------- オフライン解析キュー ---------- */
+
+export function enqueueAnalysis(job) {
+  return withStore('readwrite', (store) => { store.put(job); }, STORE.queue);
+}
+
+export function listQueuedAnalyses() {
+  return withStore('readonly', (store, setResult) => {
+    const request = store.getAll();
+    request.onsuccess = () => { setResult(request.result || []); };
+  }, STORE.queue);
+}
+
+export function updateQueuedAnalysis(job) {
+  return withStore('readwrite', (store) => { store.put(job); }, STORE.queue);
+}
+
+export function deleteQueuedAnalysis(id) {
+  return withStore('readwrite', (store) => { store.delete(id); }, STORE.queue);
+}
+
+/* ---------- 消費・廃棄履歴 ---------- */
+
+export function addConsumption(entry) {
+  return withStore('readwrite', (store) => { store.put(entry); }, STORE.history);
+}
+
+export function listConsumption() {
+  return withStore('readonly', (store, setResult) => {
+    const request = store.index('idx_consumedAt').getAll();
+    request.onsuccess = () => { setResult(request.result || []); };
+  }, STORE.history);
+}
+
+/* ---------- 賞味期限の学習 ---------- */
+
+export function saveExpiryHint(hint) {
+  return withStore('readwrite', (store) => { store.put(hint); }, STORE.hints);
+}
+
+export function listExpiryHints() {
+  return withStore('readonly', (store, setResult) => {
+    const request = store.getAll();
+    request.onsuccess = () => { setResult(request.result || []); };
+  }, STORE.hints);
 }

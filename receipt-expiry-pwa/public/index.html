@@ -129,6 +129,18 @@
     </div>
   </div>
 
+  <div id="consume-modal" class="overlay hidden" role="dialog" aria-modal="true" aria-labelledby="consume-title">
+    <div class="sheet">
+      <h2 id="consume-title">在庫から削除</h2>
+      <p id="consume-item" class="sheet-lead"></p>
+      <p class="hint">今回の記録は今月のサマリーに反映されます。</p>
+      <button id="consume-eaten" class="menu-btn" type="button">🍽　食べた</button>
+      <button id="consume-discarded" class="menu-btn" type="button">🗑　捨てた</button>
+      <button id="consume-cancel" class="menu-btn is-ghost" type="button">キャンセル</button>
+    </div>
+  </div>
+
+
   <div id="settings-modal" class="overlay hidden" role="dialog" aria-modal="true" aria-labelledby="settings-title">
     <div class="sheet sheet-wide">
       <h2 id="settings-title">設定・使い方</h2>
@@ -142,6 +154,33 @@
         <button id="install-btn" class="btn is-primary hidden" type="button">ホーム画面に追加</button>
         <p class="hint">追加すると、アイコンから全画面で起動できます。保存済みの在庫はオフラインでも閲覧できます。</p>
       </section>
+
+      <section class="settings-section">
+        <h3>賞味期限の通知</h3>
+        <p class="hint">有効にすると、最も近い賞味期限の「日付だけ」をサーバーに保存し、その日以降にプッシュ通知を送ります。食材名や数量は送信しません。</p>
+        <div class="inline-actions">
+          <button id="notify-enable-btn" class="btn is-primary" type="button">通知を有効にする</button>
+          <button id="notify-disable-btn" class="btn is-ghost" type="button">無効にする</button>
+        </div>
+        <p id="notify-status" class="hint" aria-live="polite"></p>
+      </section>
+
+
+      <section class="settings-section">
+        <h3>オフライン解析キュー</h3>
+        <p class="hint">オフラインで撮影したレシートは、接続が戻ったら自動で解析します。APIキーは端末に保存しません。</p>
+        <div class="inline-actions">
+          <button id="retry-queue-btn" class="btn is-primary" type="button">今すぐ再試行</button>
+        </div>
+        <p id="queue-status" class="hint" aria-live="polite"></p>
+      </section>
+
+      <section class="settings-section">
+        <h3>消費・廃棄の記録</h3>
+        <p id="history-summary" class="hint" aria-live="polite"></p>
+        <p class="hint">食材を削除する際に「食べた / 捨てた」を選ぶと、今月の件数がここに表示されます。</p>
+      </section>
+
 
       <section class="settings-section">
         <h3>在庫のバックアップ</h3>
