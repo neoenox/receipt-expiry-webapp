@@ -36,6 +36,19 @@
         <button class="tab" type="button" role="tab" aria-selected="false" data-storage="pantry">常温</button>
       </div>
 
+      <div class="list-controls">
+        <input id="search-input" class="search-input" type="search" placeholder="食材名・メモで検索" aria-label="在庫を検索">
+        <label class="sort-label">並び替え
+          <select id="sort-select" aria-label="並び替え">
+            <option value="expiry">期限が近い順</option>
+            <option value="name">名前順</option>
+            <option value="createdAt">新しい順</option>
+            <option value="storage">保存場所順</option>
+          </select>
+        </label>
+      </div>
+
+
       <div class="list-heading">
         <h2>在庫一覧</h2>
         <span id="item-count" class="count">0件</span>

@@ -160,6 +160,13 @@ export function listConsumption() {
   }, STORE.history);
 }
 
+export function importConsumption(entries) {
+  return withStore('readwrite', (store) => {
+    for (const entry of entries) store.put(entry);
+  }, STORE.history);
+}
+
+
 /* ---------- 賞味期限の学習 ---------- */
 
 export function saveExpiryHint(hint) {
@@ -172,3 +179,10 @@ export function listExpiryHints() {
     request.onsuccess = () => { setResult(request.result || []); };
   }, STORE.hints);
 }
+
+export function importExpiryHints(hints) {
+  return withStore('readwrite', (store) => {
+    for (const hint of hints) store.put(hint);
+  }, STORE.hints);
+}
+
