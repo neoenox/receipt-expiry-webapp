@@ -419,7 +419,8 @@ function createResultRow(item = {}, annotation = {}) {
 
   const notice = row.querySelector('.row-notice');
   if (annotation.duplicate) {
-    notice.textContent = '在庫に同じ食材と賞味期限があります（既定では登録しません）。';
+    row.dataset.matchedId = annotation.matchedStock?.id || '';
+    notice.textContent = '在庫に同じ食材と賞味期限があります。チェックを入れると既存の数量に加算します。';
     notice.classList.remove('hidden');
   } else {
     notice.classList.add('hidden');
@@ -455,6 +456,7 @@ function openResultModal(result) {
 async function saveResult() {
   const rows = Array.from(ui.resultItems.querySelectorAll('.result-row'));
   const items = [];
+  const quantityUpdates = [];
   for (const [index, row] of rows.entries()) {
     if (!row.querySelector('.field-selected').checked) continue;
     const name = row.querySelector('.field-name').value.trim();
@@ -463,25 +465,37 @@ async function saveResult() {
       showToast(`${index + 1}行目の食材名と賞味期限を入力してください。`);
       return;
     }
+    const quantity = row.querySelector('.field-quantity').value.trim();
+    const matchedId = row.dataset.matchedId;
+    if (matchedId) {
+      const existing = state.items.find((entry) => entry.id === matchedId);
+      if (existing) {
+        const merged = quantity ? (existing.quantity ? `${existing.quantity} + ${quantity}` : quantity) : existing.quantity;
+        quantityUpdates.push({ ...existing, quantity: merged });
+        continue;
+      }
+    }
     items.push({
       name,
       storage: row.querySelector('.field-storage').value,
       expiryDate,
-      quantity: row.querySelector('.field-quantity').value.trim(),
+      quantity,
       purchaseDate: state.resultPurchaseDate || todayISO(),
     });
   }
-  if (items.length === 0) {
+  if (items.length === 0 && quantityUpdates.length === 0) {
     showToast('登録する食材がありません。');
     return;
   }
 
   ui.resultSave.disabled = true;
   try {
-    await addItemsBulk(items);
+    if (items.length) await addItemsBulk(items);
+    for (const updated of quantityUpdates) await updateItem(updated);
     closeModal(ui.resultModal);
     await refreshItems();
-    showToast(`${items.length}件の食材を登録しました。`);
+    const total = items.length + quantityUpdates.length;
+    showToast(`${total}件の食材を登録しました。`);
   } catch (error) {
     showToast(error.message || '保存に失敗しました。');
   } finally {

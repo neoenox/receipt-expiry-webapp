@@ -7,19 +7,20 @@ const SORTS = new Set(['expiry', 'name', 'createdAt', 'storage']);
  * DOM には触れず、表示側がそのまま使えるメタデータだけを返す。
  */
 export function annotateResultItems(items, { stockItems = [], hints = new Map() } = {}) {
-  const stockKeys = new Set(
-    (stockItems || []).map((item) => `${normalizeFoodName(item.name)}|${item.expiryDate || ''}`)
+  const stockByKey = new Map(
+    (stockItems || []).map((stock) => [`${normalizeFoodName(stock.name)}|${stock.expiryDate || ''}`, stock])
   );
   return (items || []).map((item) => {
     const name = normalizeFoodName(item.name || '');
     const hint = hints instanceof Map ? hints.get(name) : null;
-    const duplicate = Boolean(name && stockKeys.has(`${name}|${item.expiryDate || ''}`));
+    const matched = name ? stockByKey.get(`${name}|${item.expiryDate || ''}`) : null;
     return {
       item,
-      duplicate,
+      duplicate: Boolean(matched),
+      matchedStock: matched || null,
       hint,
       hintDiffers: Boolean(hint && item.expiryDate && hint !== item.expiryDate),
-      selected: !duplicate,
+      selected: !matched,
     };
   });
 }
