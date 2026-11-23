@@ -169,33 +169,33 @@ test('notification opt-in succeeds with a subscribed push manager', async ({ pag
   await page.addInitScript(() => {
     Object.defineProperty(Notification, 'permission', { get: () => 'granted' });
     Notification.requestPermission = async () => 'granted';
-    PushManager.prototype.subscribe = async () => ({
+    const subscription = {
       endpoint: 'https://example.test/e2e',
       keys: { p256dh: 'AAA', auth: 'BBB' },
       toJSON() { return { endpoint: this.endpoint, keys: this.keys }; },
       unsubscribe: async () => true,
-    });
-    PushManager.prototype.getSubscription = async () => null;
+    };
+    PushManager.prototype.subscribe = async () => subscription;
+    // 実際のブラウザと同じく、subscribe 後は getSubscription が購読を返す。
+    PushManager.prototype.getSubscription = async () => subscription;
   });
   await page.goto('/');
   await resetStorage(page);
-  await page.route('**/api/push/**', (route) => route.fulfill({
-    status: 200,
-    contentType: 'application/json',
-    body: JSON.stringify({ ok: true }),
-  }));
-  await page.route('**/api/push/config', (route) => route.fulfill({
-    status: 200,
-    contentType: 'application/json',
-    body: JSON.stringify({
-      publicKey: 'BBH70Vd1epc-FBv8gqa8ZrwgLMcXqJMq4eTHzloq7NW_9oBkqriptpJ100zUK_7oDv9Pb6_qLE64gxPtIJObuFk',
-    }),
-  }));
-  await page.click('#settings-btn');
 
+  // 実 API（OCI サーバー）の push ルートを使い、購読が保存されることを確認する。
+  const subscribeRequests = [];
+  page.on('request', (request) => {
+    if (request.url().includes('/api/push/subscribe') && request.method() === 'POST') {
+      subscribeRequests.push(JSON.parse(request.postData() || '{}'));
+    }
+  });
+
+  await page.click('#settings-btn');
   await page.click('[data-settings-tab="notify"]');
   await page.click('#notify-enable-btn');
   await expect(page.locator('#notify-status')).toContainText('通知を有効にしています');
+  await expect.poll(() => subscribeRequests.length).toBeGreaterThan(0);
+  expect(subscribeRequests[0].subscription.endpoint).toBe('https://example.test/e2e');
 });
 
 
