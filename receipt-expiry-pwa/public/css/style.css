@@ -665,7 +665,7 @@ button:focus-visible, input:focus-visible, select:focus-visible {
   object-fit: contain;
   border: 1px solid var(--border);
   border-radius: 12px;
-  background: #000;
+  background: #fff;
 }
 .crop-controls {
   display: grid;

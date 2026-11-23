@@ -1,5 +1,5 @@
 import { initDB, addItemsBulk, getAllItemsSorted, updateItem, deleteItem, enqueueAnalysis, addConsumption, listConsumption, saveExpiryHint, listExpiryHints, addShoppingItems, listShoppingItems, deleteShoppingItem } from './db.js';
-import { processReceiptImage } from './imageProcessor.js';
+import { processReceiptImage, renderPreviewCanvas } from './imageProcessor.js';
 import { analyzeReceipt, isValidDate } from './apiClient.js';
 import { createQueuedAnalysis } from './queue.js';
 import { createConsumption, summarizeHistory } from './history.js';
@@ -180,11 +180,7 @@ function openModal(element) {
 }
 
 function closeModal(element) {
-  if (element === ui.previewModal && ui.previewImage.src.startsWith('blob:')) {
-    URL.revokeObjectURL(ui.previewImage.src);
-    ui.previewImage.removeAttribute('src');
-    state.previewFiles = [];
-  }
+  if (element === ui.previewModal) state.previewFiles = [];
   element.classList.add('hidden');
   state.modalStack = state.modalStack.filter((item) => item !== element);
   const top = state.modalStack[state.modalStack.length - 1];
@@ -279,18 +275,41 @@ function openPreview(files) {
   state.previewResults = [];
   state.previewRotate = 0;
   for (const id of ['crop-top', 'crop-bottom', 'crop-left', 'crop-right']) byId(id).value = '0';
-  renderPreview();
+  void renderPreview();
   openModal(ui.previewModal);
 }
 
-function renderPreview() {
+async function renderPreview() {
   const file = state.previewFiles[state.previewIndex];
   if (!file) return;
-  if (ui.previewImage.src.startsWith('blob:')) URL.revokeObjectURL(ui.previewImage.src);
-  ui.previewImage.src = URL.createObjectURL(file);
-  ui.previewImage.style.transform = `rotate(${state.previewRotate}deg)`;
+  let source;
+  try {
+    source = typeof createImageBitmap === 'function'
+      ? await createImageBitmap(file, { imageOrientation: 'from-image' })
+      : await loadPreviewImage(file);
+    const canvas = renderPreviewCanvas(source, { rotate: state.previewRotate, crop: cropOptions(), maxSize: 720 });
+    ui.previewImage.width = canvas.width;
+    ui.previewImage.height = canvas.height;
+    const ctx = ui.previewImage.getContext('2d');
+    ctx.clearRect(0, 0, ui.previewImage.width, ui.previewImage.height);
+    ctx.drawImage(canvas, 0, 0);
+  } catch (error) {
+    showToast(error.message || '画像を表示できませんでした。');
+  } finally {
+    if (source?.close) source.close();
+  }
   ui.previewProgress.textContent = `${state.previewIndex + 1}/${state.previewFiles.length}`;
   byId('preview-confirm').textContent = state.previewIndex + 1 < state.previewFiles.length ? '次の画像へ' : '解析する';
+}
+
+function loadPreviewImage(file) {
+  return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(file);
+    const image = new Image();
+    image.onload = () => { URL.revokeObjectURL(url); resolve(image); };
+    image.onerror = () => { URL.revokeObjectURL(url); reject(new Error('画像のデコードに失敗しました')); };
+    image.src = url;
+  });
 }
 
 function cropOptions() {
@@ -316,7 +335,7 @@ async function confirmPreview() {
     state.previewResults.push({ imageBase64: base64, mimeType, clientDate: todayISO() });
     state.previewIndex += 1;
     if (state.previewIndex < state.previewFiles.length) {
-      renderPreview();
+      void renderPreview();
     } else {
       closeModal(ui.previewModal);
       await submitProcessed(state.previewResults);
@@ -703,8 +722,11 @@ function wireEvents() {
 
   byId('preview-rotate').addEventListener('click', () => {
     state.previewRotate = (state.previewRotate + 90) % 360;
-    ui.previewImage.style.transform = `rotate(${state.previewRotate}deg)`;
+    void renderPreview();
   });
+  for (const id of ['crop-top', 'crop-bottom', 'crop-left', 'crop-right']) {
+    byId(id).addEventListener('input', () => void renderPreview());
+  }
   byId('preview-confirm').addEventListener('click', () => void confirmPreview());
   byId('preview-cancel').addEventListener('click', () => closeModal(ui.previewModal));
 

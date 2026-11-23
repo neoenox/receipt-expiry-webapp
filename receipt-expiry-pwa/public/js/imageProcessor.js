@@ -4,6 +4,43 @@ import { cropRect } from './features2.js';
 const MAX_SIZE = 1024;
 const MAX_FILE_BYTES = 20 * 1024 * 1024;
 
+/** 回転とクロップを適用した canvas を返す（プレビューと本番処理で共有）。 */
+export function renderPreviewCanvas(source, { rotate = 0, crop = {}, maxSize = MAX_SIZE } = {}) {
+  const originalWidth = source.width || source.naturalWidth;
+  const originalHeight = source.height || source.naturalHeight;
+  if (!originalWidth || !originalHeight) throw new Error('画像のサイズを取得できませんでした。');
+
+  const swap = Number(rotate) % 180 !== 0;
+  const rotatedWidth = swap ? originalHeight : originalWidth;
+  const rotatedHeight = swap ? originalWidth : originalHeight;
+
+  const intermediate = document.createElement('canvas');
+  intermediate.width = rotatedWidth;
+  intermediate.height = rotatedHeight;
+  const ictx = intermediate.getContext('2d');
+  if (!ictx) throw new Error('画像を処理できませんでした。');
+  ictx.fillStyle = '#ffffff';
+  ictx.fillRect(0, 0, rotatedWidth, rotatedHeight);
+  ictx.translate(rotatedWidth / 2, rotatedHeight / 2);
+  ictx.rotate((Number(rotate) * Math.PI) / 180);
+  ictx.drawImage(source, -originalWidth / 2, -originalHeight / 2);
+
+  const rect = cropRect(rotatedWidth, rotatedHeight, crop, 0);
+  const scale = Math.min(1, maxSize / Math.max(rect.width, rect.height));
+  const targetWidth = Math.max(1, Math.round(rect.width * scale));
+  const targetHeight = Math.max(1, Math.round(rect.height * scale));
+
+  const canvas = document.createElement('canvas');
+  canvas.width = targetWidth;
+  canvas.height = targetHeight;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) throw new Error('画像を処理できませんでした。');
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(0, 0, targetWidth, targetHeight);
+  ctx.drawImage(intermediate, rect.x, rect.y, rect.width, rect.height, 0, 0, targetWidth, targetHeight);
+  return canvas;
+}
+
 /**
  * レシート画像を長辺1024pxのJPEGへリサイズし、プレフィックスなしのBase64を返す。
  * createImageBitmap がEXIF回転を補正するため、縦撮影画像も正しい向きで描画される。
@@ -28,43 +65,7 @@ export async function processReceiptImage(file, options = {}) {
       release = () => {};
     }
 
-    const originalWidth = source.width || source.naturalWidth;
-    const originalHeight = source.height || source.naturalHeight;
-    if (!originalWidth || !originalHeight) {
-      throw new Error('画像のサイズを取得できませんでした。');
-    }
-    const rotate = Number(options.rotate) || 0;
-    const swap = rotate % 180 !== 0;
-    const rotatedWidth = swap ? originalHeight : originalWidth;
-    const rotatedHeight = swap ? originalWidth : originalHeight;
-
-    const intermediate = document.createElement('canvas');
-    intermediate.width = rotatedWidth;
-    intermediate.height = rotatedHeight;
-    const ictx = intermediate.getContext('2d');
-    if (!ictx) throw new Error('画像を処理できませんでした。');
-    ictx.fillStyle = '#ffffff';
-    ictx.fillRect(0, 0, rotatedWidth, rotatedHeight);
-    ictx.translate(rotatedWidth / 2, rotatedHeight / 2);
-    ictx.rotate((rotate * Math.PI) / 180);
-    ictx.drawImage(source, -originalWidth / 2, -originalHeight / 2);
-
-    const rect = cropRect(rotatedWidth, rotatedHeight, options.crop || {}, 0);
-    const scale = Math.min(1, MAX_SIZE / Math.max(rect.width, rect.height));
-    const targetWidth = Math.max(1, Math.round(rect.width * scale));
-    const targetHeight = Math.max(1, Math.round(rect.height * scale));
-
-    const canvas = document.createElement('canvas');
-    canvas.width = targetWidth;
-    canvas.height = targetHeight;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) throw new Error('画像を処理できませんでした。');
-
-    // 透過PNGをJPEGに変換すると黒背景になるため、先に白で塗りつぶす。
-    ctx.fillStyle = '#ffffff';
-    ctx.fillRect(0, 0, targetWidth, targetHeight);
-    ctx.drawImage(intermediate, rect.x, rect.y, rect.width, rect.height, 0, 0, targetWidth, targetHeight);
-
+    const canvas = renderPreviewCanvas(source, { rotate: options.rotate, crop: options.crop || {} });
 
     const webpProbe = canvas.toDataURL('image/webp', QUALITY_STEPS[0]);
     const mimeType = dataUrlMime(webpProbe) === 'image/webp' ? 'image/webp' : 'image/jpeg';

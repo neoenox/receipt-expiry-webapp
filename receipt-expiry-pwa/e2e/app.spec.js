@@ -266,6 +266,23 @@ test('multiple receipts are previewed and merged into one result', async ({ page
   await expect(page.locator('#result-items .result-row')).toHaveCount(2);
 });
 
+test('preview rotation and crop sliders update the canvas', async ({ page }) => {
+  await page.goto('/');
+  await resetStorage(page);
+  await page.setInputFiles('#gallery-input', ICON_PATH);
+  await expect(page.locator('#preview-modal')).toBeVisible();
+
+  const before = await page.evaluate(() => document.querySelector('#preview-image').toDataURL());
+  await page.click('#preview-rotate');
+  await expect.poll(() => page.evaluate(() => document.querySelector('#preview-image').toDataURL()))
+    .not.toBe(before);
+
+  const rotated = await page.evaluate(() => document.querySelector('#preview-image').toDataURL());
+  await page.locator('#crop-left').fill('20');
+  await expect.poll(() => page.evaluate(() => document.querySelector('#preview-image').toDataURL()))
+    .not.toBe(rotated);
+});
+
 test('duplicate results are unselected and only selected rows are saved', async ({ page }) => {
   await page.goto('/');
   await resetStorage(page);
