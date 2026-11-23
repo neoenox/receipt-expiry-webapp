@@ -219,6 +219,38 @@ test('multiple receipts are previewed and merged into one result', async ({ page
   await expect(page.locator('#result-items .result-row')).toHaveCount(2);
 });
 
+test('duplicate results are unselected and only selected rows are saved', async ({ page }) => {
+  await page.goto('/');
+  await resetStorage(page);
+  await addItem(page, '牛乳', '2026-12-01');
+
+  await page.route('**/api/analyze', (route) => route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify({
+      purchaseDate: '2026-11-23',
+      items: [
+        { name: '牛乳', storage: 'fridge', expiryDate: '2026-12-01', quantity: '' },
+        { name: 'パン', storage: 'pantry', expiryDate: '2026-11-30', quantity: '' },
+      ],
+    }),
+  }));
+
+  await page.setInputFiles('#gallery-input', ICON_PATH);
+  await page.click('#preview-confirm');
+
+  const rows = page.locator('#result-items .result-row');
+  await expect(rows).toHaveCount(2);
+  await expect(rows.nth(0).locator('.row-notice')).toContainText('在庫に同じ食材');
+  await expect(rows.nth(0).locator('.field-selected')).not.toBeChecked();
+  await expect(rows.nth(1).locator('.field-selected')).toBeChecked();
+  await expect(page.locator('#result-summary')).toContainText('2件中 1件を登録します');
+
+  await page.click('#result-save');
+  await expect(page.locator('#item-count')).toHaveText('2件');
+  await expect(page.locator('.item-name', { hasText: 'パン' })).toBeVisible();
+});
+
 test('shopping list suggestions come from consumed items', async ({ page }) => {
   await page.goto('/');
   await resetStorage(page);

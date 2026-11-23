@@ -1,4 +1,28 @@
+import { normalizeFoodName } from './learning.js';
+
 const SORTS = new Set(['expiry', 'name', 'createdAt', 'storage']);
+
+/**
+ * 解析結果の各行に、既存在庫との重複と学習済み期限との差分を注記する。
+ * DOM には触れず、表示側がそのまま使えるメタデータだけを返す。
+ */
+export function annotateResultItems(items, { stockItems = [], hints = new Map() } = {}) {
+  const stockKeys = new Set(
+    (stockItems || []).map((item) => `${normalizeFoodName(item.name)}|${item.expiryDate || ''}`)
+  );
+  return (items || []).map((item) => {
+    const name = normalizeFoodName(item.name || '');
+    const hint = hints instanceof Map ? hints.get(name) : null;
+    const duplicate = Boolean(name && stockKeys.has(`${name}|${item.expiryDate || ''}`));
+    return {
+      item,
+      duplicate,
+      hint,
+      hintDiffers: Boolean(hint && item.expiryDate && hint !== item.expiryDate),
+      selected: !duplicate,
+    };
+  });
+}
 
 export function filterAndSortItems(items, { filter = 'all', search = '', sort = 'expiry' } = {}) {
   const keyword = String(search || '').trim().toLowerCase();

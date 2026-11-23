@@ -4,7 +4,7 @@ import { analyzeReceipt, isValidDate } from './apiClient.js';
 import { createQueuedAnalysis } from './queue.js';
 import { createConsumption, summarizeHistory } from './history.js';
 import { createExpiryHint, buildHintMap, normalizeFoodName } from './learning.js';
-import { filterAndSortItems } from './inventory.js';
+import { filterAndSortItems, annotateResultItems } from './inventory.js';
 import { buildShoppingSuggestions } from './features2.js';
 import { createCalendarUI } from './calendarUI.js';
 import { analyzePayloads } from './analysisFlow.js';
@@ -404,21 +404,50 @@ async function submitAnalysis(payload) {
 
 /* ---------- 解析結果の確認・一括登録 ---------- */
 
-function createResultRow(item = {}) {
+function createResultRow(item = {}, annotation = {}) {
   const row = ui.rowTemplate.content.firstElementChild.cloneNode(true);
   row.querySelector('.field-name').value = item.name || '';
   row.querySelector('.field-storage').value = item.storage || 'fridge';
-  const hint = state.expiryHints.get(normalizeFoodName(item.name || ''));
+  const hint = annotation.hint || state.expiryHints.get(normalizeFoodName(item.name || ''));
   row.querySelector('.field-expiry').value = item.expiryDate || hint || defaultExpiryISO();
   row.querySelector('.field-quantity').value = item.quantity || '';
+
+  const selected = row.querySelector('.field-selected');
+  selected.checked = annotation.selected !== false;
+  row.classList.toggle('is-unselected', !selected.checked);
+
+  const notice = row.querySelector('.row-notice');
+  if (annotation.duplicate) {
+    notice.textContent = '在庫に同じ食材と賞味期限があります（既定では登録しません）。';
+    notice.classList.remove('hidden');
+  } else {
+    notice.classList.add('hidden');
+  }
+  const hintNote = row.querySelector('.hint-expiry');
+  if (annotation.hintDiffers) {
+    hintNote.textContent = `前回の賞味期限: ${hint}`;
+    hintNote.classList.remove('hidden');
+  } else {
+    hintNote.classList.add('hidden');
+  }
   return row;
+}
+
+function updateResultSummary() {
+  const rows = Array.from(ui.resultItems.querySelectorAll('.result-row'));
+  const selected = rows.filter((row) => row.querySelector('.field-selected').checked).length;
+  const dateText = state.resultPurchaseDate ? `購入日: ${state.resultPurchaseDate} ／ ` : '';
+  ui.resultSummary.textContent = `${dateText}${rows.length}件中 ${selected}件を登録します。内容を確認・修正してください。`;
 }
 
 function openResultModal(result) {
   state.resultPurchaseDate = result.purchaseDate;
-  ui.resultItems.replaceChildren(...result.items.map((item) => createResultRow(item)));
-  const dateText = result.purchaseDate ? `購入日: ${result.purchaseDate} ／ ` : '';
-  ui.resultSummary.textContent = `${dateText}${result.items.length}件の食材が見つかりました。内容を確認・修正してください。`;
+  const annotations = annotateResultItems(result.items, {
+    stockItems: state.items,
+    hints: state.expiryHints,
+  });
+  ui.resultItems.replaceChildren(...result.items.map((item, index) => createResultRow(item, annotations[index])));
+  updateResultSummary();
   openModal(ui.resultModal);
 }
 
@@ -426,6 +455,7 @@ async function saveResult() {
   const rows = Array.from(ui.resultItems.querySelectorAll('.result-row'));
   const items = [];
   for (const [index, row] of rows.entries()) {
+    if (!row.querySelector('.field-selected').checked) continue;
     const name = row.querySelector('.field-name').value.trim();
     const expiryDate = row.querySelector('.field-expiry').value;
     if (!name || !isValidDate(expiryDate)) {
@@ -694,10 +724,31 @@ function wireEvents() {
   ui.resultItems.addEventListener('click', (event) => {
     if (event.target.closest('.row-remove')) {
       event.target.closest('.result-row').remove();
+      updateResultSummary();
     }
+  });
+  ui.resultItems.addEventListener('change', (event) => {
+    if (!event.target.classList.contains('field-selected')) return;
+    event.target.closest('.result-row').classList.toggle('is-unselected', !event.target.checked);
+    updateResultSummary();
   });
   byId('result-add-row').addEventListener('click', () => {
     ui.resultItems.append(createResultRow());
+    updateResultSummary();
+  });
+  byId('result-select-all').addEventListener('click', () => {
+    for (const checkbox of ui.resultItems.querySelectorAll('.field-selected')) {
+      checkbox.checked = true;
+      checkbox.closest('.result-row').classList.remove('is-unselected');
+    }
+    updateResultSummary();
+  });
+  byId('result-select-none').addEventListener('click', () => {
+    for (const checkbox of ui.resultItems.querySelectorAll('.field-selected')) {
+      checkbox.checked = false;
+      checkbox.closest('.result-row').classList.add('is-unselected');
+    }
+    updateResultSummary();
   });
   byId('result-cancel').addEventListener('click', () => closeModal(ui.resultModal));
   ui.resultSave.addEventListener('click', () => void saveResult());
