@@ -586,7 +586,10 @@ function makeId() {
 
 async function refreshShopping() {
   const history = await listConsumption();
-  const suggestions = buildShoppingSuggestions(history, state.items);
+  const suggestions = buildShoppingSuggestions(history, state.items).map((entry) => ({
+    ...entry,
+    expiry: state.expiryHints.get(normalizeFoodName(entry.name)) || '',
+  }));
   const saved = await listShoppingItems();
 
   state.shoppingCache = saved;
@@ -600,6 +603,8 @@ async function refreshShopping() {
     const button = document.createElement('button');
     button.type = 'button';
     button.dataset.name = suggestion.name;
+    button.dataset.storage = suggestion.storage || 'pantry';
+    button.dataset.expiry = suggestion.expiry || '';
     button.textContent = '追加';
     row.append(label, button);
     ui.shoppingSuggestions.append(row);
@@ -694,7 +699,14 @@ function wireEvents() {
   ui.shoppingSuggestions.addEventListener('click', (event) => {
     const name = event.target.dataset.name;
     if (!name) return;
-    void addShoppingItems([{ id: makeId(), name, createdAt: Date.now() }]).then(refreshShopping);
+    const button = event.target.closest('button[data-name]');
+    void addShoppingItems([{
+      id: makeId(),
+      name,
+      storage: button?.dataset.storage || 'pantry',
+      expiryDate: button?.dataset.expiry || '',
+      createdAt: Date.now(),
+    }]).then(refreshShopping);
   });
   ui.shoppingItems.addEventListener('click', (event) => {
     const addId = event.target.dataset.add;
@@ -703,7 +715,12 @@ function wireEvents() {
       const item = (state.shoppingCache || []).find((entry) => entry.id === addId);
       void (async () => {
         if (item) {
-          await addItemsBulk([{ name: item.name, storage: 'pantry', expiryDate: defaultExpiryISO(), quantity: '' }]);
+          await addItemsBulk([{
+            name: item.name,
+            storage: item.storage || 'pantry',
+            expiryDate: item.expiryDate || defaultExpiryISO(),
+            quantity: '',
+          }]);
           await refreshItems();
         }
         await deleteShoppingItem(addId);

@@ -135,6 +135,15 @@ test('shopping suggestions exclude current stock and sort by frequency', () => {
   assert.equal(suggestions[0].count, 2);
 });
 
+test('shopping suggestions carry the usual storage location', () => {
+  const history = [
+    { name: '牛乳', reason: 'eaten', consumedAt: 1, storage: 'fridge' },
+    { name: '牛乳', reason: 'eaten', consumedAt: 2, storage: 'fridge' },
+  ];
+  const [suggestion] = buildShoppingSuggestions(history, []);
+  assert.equal(suggestion.storage, 'fridge');
+});
+
 test('calendar groups items by expiry day within the requested month', () => {
   const items = [
     { name: 'A', expiryDate: '2026-11-05' },

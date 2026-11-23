@@ -286,6 +286,7 @@ test('shopping list suggestions come from consumed items', async ({ page }) => {
   await page.click('#shopping-items button[data-add]');
   await page.click('#shopping-close');
   await expect(page.locator('.item-name')).toHaveText('牛乳');
+  await expect(page.locator('.item-card')).toContainText('冷蔵');
 });
 
 test('calendar view groups items by expiry date and advances one month per click', async ({ page }) => {
