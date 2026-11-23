@@ -18,6 +18,15 @@ export function buildShoppingSuggestions(history, items, limit = 8) {
     .slice(0, limit);
 }
 
+/** 月送りを1回だけ適用し、年またぎを処理する。 */
+export function shiftMonth(year, month, direction) {
+  let nextYear = year;
+  let nextMonth = month + (direction === 'prev' ? -1 : 1);
+  if (nextMonth < 0) { nextMonth = 11; nextYear -= 1; }
+  if (nextMonth > 11) { nextMonth = 0; nextYear += 1; }
+  return { year: nextYear, month: nextMonth };
+}
+
 /** 月カレンダーの日付 -> アイテム一覧を作成する。 */
 export function buildCalendar(items, year, month) {
   const days = new Map();

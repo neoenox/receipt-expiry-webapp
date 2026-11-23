@@ -233,13 +233,23 @@ test('shopping list suggestions come from consumed items', async ({ page }) => {
   await expect(page.locator('.item-name')).toHaveText('牛乳');
 });
 
-test('calendar view groups items by expiry date', async ({ page }) => {
+test('calendar view groups items by expiry date and advances one month per click', async ({ page }) => {
   await page.goto('/');
   await resetStorage(page);
   await addItem(page, '牛乳', `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}-05`);
   await page.click('#view-toggle');
   await expect(page.locator('#calendar-view')).toBeVisible();
   await expect(page.locator('#calendar-view')).toContainText('牛乳');
+
+  const label = page.locator('#calendar-view .calendar-header strong');
+  const before = await label.textContent();
+  await page.locator('[data-calendar="next"]').click();
+  const after = await label.textContent();
+  const [year, month] = before.match(/(\d+)年 (\d+)月/).slice(1).map(Number);
+  const expectedMonth = month === 12 ? 1 : month + 1;
+  const expectedYear = month === 12 ? year + 1 : year;
+  expect(after).toBe(`${expectedYear}年 ${expectedMonth}月`);
+
   await page.click('#view-toggle');
   await expect(page.locator('#item-list')).toBeVisible();
 });

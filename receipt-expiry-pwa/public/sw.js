@@ -1,5 +1,5 @@
 const CACHE_PREFIX = 'receipt-expiry-';
-const CACHE_NAME = `${CACHE_PREFIX}v9`;
+const CACHE_NAME = `${CACHE_PREFIX}v10`;
 const STATIC_ASSETS = [
   '/',
   '/index.html',
@@ -9,6 +9,8 @@ const STATIC_ASSETS = [
   '/js/settings.js',
   '/js/queueUI.js',
   '/js/features2.js',
+  '/js/analysisFlow.js',
+  '/js/calendarUI.js',
 
   '/js/db.js',
   '/js/backup.js',
@@ -98,6 +100,16 @@ self.addEventListener('fetch', (event) => {
   event.respondWith(isNetworkFirst(url) ? networkFirst(request) : cacheFirst(request));
 });
 
+function safeNotificationUrl(raw) {
+  try {
+    const url = new URL(raw || '/', self.location.origin);
+    if (url.origin !== self.location.origin) return '/';
+    return url.pathname + url.search + url.hash;
+  } catch {
+    return '/';
+  }
+}
+
 self.addEventListener('push', (event) => {
   let payload = {};
   try {
@@ -108,11 +120,11 @@ self.addEventListener('push', (event) => {
   event.waitUntil(self.registration.showNotification(payload.title || 'レシート賞味期限', {
     body: payload.body || '賞味期限を確認してください。',
     icon: '/icons/icon-192.png',
-    data: { url: payload.url || '/' },
+    data: { url: safeNotificationUrl(payload.url) },
   }));
 });
 
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
-  event.waitUntil(clients.openWindow(event.notification.data?.url || '/'));
+  event.waitUntil(clients.openWindow(safeNotificationUrl(event.notification.data?.url)));
 });

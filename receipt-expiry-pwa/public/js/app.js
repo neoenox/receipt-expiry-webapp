@@ -179,6 +179,11 @@ function openModal(element) {
 }
 
 function closeModal(element) {
+  if (element === ui.previewModal && ui.previewImage.src.startsWith('blob:')) {
+    URL.revokeObjectURL(ui.previewImage.src);
+    ui.previewImage.removeAttribute('src');
+    state.previewFiles = [];
+  }
   element.classList.add('hidden');
   state.modalStack = state.modalStack.filter((item) => item !== element);
   const top = state.modalStack[state.modalStack.length - 1];
@@ -207,7 +212,7 @@ async function refreshItems() {
   state.items = await getAllItemsSorted();
   renderList();
 
-  void settings.syncPushReminder();
+  await settings.syncPushReminder();
 }
 
 function renderList() {
@@ -666,11 +671,7 @@ function wireEvents() {
   ui.calendarView.addEventListener('click', (event) => {
     const direction = event.target.dataset.calendar;
     if (!direction) return;
-    if (direction === 'prev') state.calendarMonth -= 1;
-    else state.calendarMonth += 1;
-    if (state.calendarMonth < 0) { state.calendarMonth = 11; state.calendarYear -= 1; }
-    if (state.calendarMonth > 11) { state.calendarMonth = 0; state.calendarYear += 1; }
-    calendarUI.shiftMonth(direction);
+    calendarUI.shift(direction);
   });
 
   ui.resultItems.addEventListener('click', (event) => {
@@ -762,7 +763,6 @@ async function init() {
     state.expiryHints = buildHintMap(await listExpiryHints());
     await queueUI.refreshQueueStatus();
 
-    await settings.syncPushReminder();
     await refreshHistorySummary();
 
     await refreshShopping();

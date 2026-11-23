@@ -4,7 +4,7 @@ import { createQueuedAnalysis, nextAttempt, shouldDiscard, MAX_QUEUE_ATTEMPTS } 
 import { createConsumption, summarizeHistory } from '../public/js/history.js';
 import { normalizeFoodName, createExpiryHint, buildHintMap } from '../public/js/learning.js';
 import { filterAndSortItems } from '../public/js/inventory.js';
-import { buildShoppingSuggestions, buildCalendar, cropRect, shouldSendAtHour, isSubscriptionRateLimited, retryDelayMs } from '../public/js/features2.js';
+import { buildShoppingSuggestions, buildCalendar, shiftMonth, cropRect, shouldSendAtHour, isSubscriptionRateLimited, retryDelayMs } from '../public/js/features2.js';
 import { analyzePayloads } from '../public/js/analysisFlow.js';
 import { dataUrlMime, base64FromDataUrl, nextQuality } from '../public/js/imageOptions.js';
 import { daysUntilDate } from '../public/js/dates.js';
@@ -99,6 +99,12 @@ test('calendar groups items by expiry day within the requested month', () => {
   const days = buildCalendar(items, 2026, 10);
   assert.equal(days.get(5).length, 2);
   assert.equal(days.has(1), false);
+});
+
+test('month shift advances exactly one month and wraps the year', () => {
+  assert.deepEqual(shiftMonth(2026, 10, 'next'), { year: 2026, month: 11 });
+  assert.deepEqual(shiftMonth(2026, 11, 'next'), { year: 2027, month: 0 });
+  assert.deepEqual(shiftMonth(2026, 0, 'prev'), { year: 2025, month: 11 });
 });
 
 test('crop rect respects rotation and bounds', () => {

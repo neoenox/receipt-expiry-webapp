@@ -1,4 +1,4 @@
-import { buildCalendar } from './features2.js';
+import { buildCalendar, shiftMonth } from './features2.js';
 
 export function createCalendarUI({ ui, state }) {
   function render() {
@@ -61,13 +61,12 @@ export function createCalendarUI({ ui, state }) {
     }
   }
 
-  function shiftMonth(direction) {
-    if (direction === 'prev') state.calendarMonth -= 1;
-    else state.calendarMonth += 1;
-    if (state.calendarMonth < 0) { state.calendarMonth = 11; state.calendarYear -= 1; }
-    if (state.calendarMonth > 11) { state.calendarMonth = 0; state.calendarYear += 1; }
+  function shift(direction) {
+    const next = shiftMonth(state.calendarYear, state.calendarMonth, direction);
+    state.calendarYear = next.year;
+    state.calendarMonth = next.month;
     render();
   }
 
-  return { render, toggle, shiftMonth };
+  return { render, toggle, shift };
 }
