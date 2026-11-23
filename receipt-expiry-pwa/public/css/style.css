@@ -14,6 +14,15 @@
   --safe: #047857;
   --safe-soft: #ecfdf5;
   --shadow: 0 6px 22px rgba(15, 23, 42, .08);
+  --surface-alt: #f8faf9;
+  --tabs-bg: #e7edeb;
+  --input-bg: #ffffff;
+  --header-bg: rgba(255, 255, 255, .94);
+  --overlay-bg: rgba(15, 23, 42, .52);
+  --toast-bg: rgba(17, 24, 39, .94);
+  --toast-text: #ffffff;
+  --on-primary: #052e24;
+  --danger-border: #fecaca;
   font-family: -apple-system, BlinkMacSystemFont, "Hiragino Kaku Gothic ProN", "Yu Gothic", "Noto Sans JP", Meiryo, sans-serif;
   color: var(--text);
   background: var(--bg);
@@ -57,7 +66,7 @@ button:focus-visible, input:focus-visible, select:focus-visible {
   justify-content: space-between;
   gap: 12px;
   padding: calc(12px + env(safe-area-inset-top)) 16px 12px;
-  background: rgba(255, 255, 255, .94);
+  background: var(--header-bg);
   backdrop-filter: blur(8px);
   border-bottom: 1px solid var(--border);
 }
@@ -71,7 +80,7 @@ button:focus-visible, input:focus-visible, select:focus-visible {
   height: 38px;
   border-radius: 12px;
   background: var(--primary);
-  color: #fff;
+  color: var(--on-primary);
   font-size: 22px;
   font-weight: 700;
   box-shadow: 0 4px 10px rgba(16, 185, 129, .3);
@@ -101,7 +110,7 @@ button:focus-visible, input:focus-visible, select:focus-visible {
   grid-template-columns: repeat(4, 1fr);
   gap: 4px;
   padding: 4px;
-  background: #e7edeb;
+  background: var(--tabs-bg);
   border-radius: 14px;
 }
 
@@ -184,6 +193,7 @@ button:focus-visible, input:focus-visible, select:focus-visible {
   padding: 0;
   border: 0;
   background: none;
+  color: inherit;
   text-align: left;
 }
 .item-name {
@@ -245,7 +255,7 @@ button:focus-visible, input:focus-visible, select:focus-visible {
   justify-content: center;
   gap: 12px;
   padding: 14px 16px calc(16px + env(safe-area-inset-bottom));
-  background: linear-gradient(to top, var(--bg) 62%, rgba(243, 246, 245, 0));
+  background: linear-gradient(to top, var(--bg) 62%, transparent);
 }
 
 .fab {
@@ -264,7 +274,7 @@ button:focus-visible, input:focus-visible, select:focus-visible {
   min-height: 54px;
   padding: 0 20px;
   background: var(--primary);
-  color: #fff;
+  color: var(--on-primary);
   font-size: 15px;
 }
 .fab-main:active { transform: translateY(1px); background: var(--primary-dark); }
@@ -284,7 +294,7 @@ button:focus-visible, input:focus-visible, select:focus-visible {
   display: flex;
   align-items: flex-end;
   justify-content: center;
-  background: rgba(15, 23, 42, .52);
+  background: var(--overlay-bg);
   padding: 0;
 }
 .sheet {
@@ -363,11 +373,16 @@ button:focus-visible, input:focus-visible, select:focus-visible {
   padding: 11px 12px;
   border: 1px solid var(--border);
   border-radius: 10px;
-  background: #fff;
+  background: var(--input-bg);
   color: var(--text);
   font-size: 16px;
   font-weight: 400;
   min-height: 44px;
+}
+
+.field input::placeholder, .search-input::placeholder {
+  color: var(--muted);
+  opacity: 1;
 }
 .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 .form-error { margin: 0 0 10px; font-size: 13px; color: var(--danger); }
@@ -382,8 +397,8 @@ button:focus-visible, input:focus-visible, select:focus-visible {
   font-size: 14px;
   font-weight: 700;
 }
-.btn.is-primary { background: var(--primary); border-color: var(--primary); color: #fff; }
-.btn.is-danger { background: var(--danger-soft); border-color: #fecaca; color: var(--danger); }
+.btn.is-primary { background: var(--primary); border-color: var(--primary); color: var(--on-primary); }
+.btn.is-danger { background: var(--danger-soft); border-color: var(--danger-border); color: var(--danger); }
 .btn.is-ghost { background: transparent; color: var(--muted); }
 .spacer { flex: 1; }
 .sheet-actions {
@@ -401,7 +416,7 @@ button:focus-visible, input:focus-visible, select:focus-visible {
   padding: 12px;
   border: 1px solid var(--border);
   border-radius: 14px;
-  background: #f8faf9;
+  background: var(--surface-alt);
 }
 .row-top { display: flex; align-items: flex-end; gap: 8px; }
 .row-name { flex: 1; }
@@ -410,7 +425,7 @@ button:focus-visible, input:focus-visible, select:focus-visible {
   width: 42px;
   height: 44px;
   margin-bottom: 12px;
-  border: 1px solid #fecaca;
+  border: 1px solid var(--danger-border);
   border-radius: 10px;
   background: var(--danger-soft);
   color: var(--danger);
@@ -427,7 +442,7 @@ button:focus-visible, input:focus-visible, select:focus-visible {
   padding: 4px;
   margin-bottom: 12px;
   border-radius: 12px;
-  background: #e7edeb;
+  background: var(--tabs-bg);
 }
 .settings-tab {
   border: 0;
@@ -451,7 +466,7 @@ button:focus-visible, input:focus-visible, select:focus-visible {
   padding: 16px;
   border: 1px solid var(--border);
   border-radius: 14px;
-  background: #f8faf9;
+  background: var(--surface-alt);
 }
 .guide { margin: 8px 0 12px; padding-left: 20px; font-size: 13px; }
 .guide li { margin-bottom: 6px; }
@@ -514,8 +529,8 @@ button:focus-visible, input:focus-visible, select:focus-visible {
   max-width: min(90vw, 460px);
   padding: 11px 18px;
   border-radius: 999px;
-  background: rgba(17, 24, 39, .94);
-  color: #fff;
+  background: var(--toast-bg);
+  color: var(--toast-text);
   font-size: 13px;
   text-align: center;
   box-shadow: var(--shadow);
@@ -533,27 +548,53 @@ button:focus-visible, input:focus-visible, select:focus-visible {
 
 
 @media (prefers-color-scheme: dark) {
-  :root {
+  :root:not([data-theme="light"]) {
     --bg: #0f172a;
     --surface: #1e293b;
+    --surface-alt: #172033;
+    --tabs-bg: #0b1220;
+    --input-bg: #0b1220;
+    --header-bg: rgba(30, 41, 59, .94);
+    --overlay-bg: rgba(2, 6, 23, .7);
     --text: #e2e8f0;
     --muted: #94a3b8;
     --border: #334155;
+    --primary-dark: #6ee7b7;
     --primary-soft: #064e3b;
+    --danger: #fca5a5;
     --danger-soft: #450a0a;
+    --danger-border: #7f1d1d;
+    --warning: #fbbf24;
     --warning-soft: #451a03;
+    --safe: #6ee7b7;
     --safe-soft: #064e3b;
+    --toast-bg: rgba(30, 41, 59, .96);
+    --toast-text: #e2e8f0;
     --shadow: 0 6px 22px rgba(0, 0, 0, .35);
   }
-  body, .app-shell { background: var(--bg); }
-  .app-header { background: rgba(30, 41, 59, .94); }
-  .action-bar { background: linear-gradient(to top, var(--bg) 62%, rgba(15, 23, 42, 0)); }
-  .tabs { background: #0b1220; }
-  .result-row, .settings-section, .guide-details { background: #172033; }
-  .field input, .field select, .search-input, .sort-label select, .menu-btn {
-    background: #0f172a;
-    color: var(--text);
-  }
-  .guide-details code { background: #0b1220; }
-  .toast { background: rgba(226, 232, 240, .94); color: #0f172a; }
+}
+
+:root[data-theme="dark"] {
+  --bg: #0f172a;
+  --surface: #1e293b;
+  --surface-alt: #172033;
+  --tabs-bg: #0b1220;
+  --input-bg: #0b1220;
+  --header-bg: rgba(30, 41, 59, .94);
+  --overlay-bg: rgba(2, 6, 23, .7);
+  --text: #e2e8f0;
+  --muted: #94a3b8;
+  --border: #334155;
+  --primary-dark: #6ee7b7;
+  --primary-soft: #064e3b;
+  --danger: #fca5a5;
+  --danger-soft: #450a0a;
+  --danger-border: #7f1d1d;
+  --warning: #fbbf24;
+  --warning-soft: #451a03;
+  --safe: #6ee7b7;
+  --safe-soft: #064e3b;
+  --toast-bg: rgba(30, 41, 59, .96);
+  --toast-text: #e2e8f0;
+  --shadow: 0 6px 22px rgba(0, 0, 0, .35);
 }
