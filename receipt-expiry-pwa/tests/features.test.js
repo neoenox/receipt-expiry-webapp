@@ -91,11 +91,12 @@ test('result annotations mark duplicates and learned-expiry differences', () => 
       { name: '卵', expiryDate: '2026-12-10' },
     ],
     {
-      stockItems: [{ name: '特濃 牛乳', expiryDate: '2026-12-01' }],
+      stockItems: [{ id: 'stock-1', name: '特濃 牛乳', expiryDate: '2026-12-01', quantity: '1本' }],
       hints: new Map([['食パン', '2026-11-28']]),
     }
   );
   assert.equal(rows[0].duplicate, true);
+  assert.equal(rows[0].matchedStock.id, 'stock-1');
   assert.equal(rows[0].selected, false);
   assert.equal(rows[1].hint, '2026-11-28');
   assert.equal(rows[1].hintDiffers, true);

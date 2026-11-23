@@ -271,6 +271,34 @@ test('duplicate results are unselected and only selected rows are saved', async 
   await expect(page.locator('.item-name', { hasText: 'パン' })).toBeVisible();
 });
 
+test('selecting a duplicate result adds to the existing quantity', async ({ page }) => {
+  await page.goto('/');
+  await resetStorage(page);
+  await addItem(page, '牛乳', '2026-12-01');
+  await page.click('.item-card-main');
+  await page.fill('#edit-quantity', '2本');
+  await page.click('#edit-form button[type="submit"]');
+
+  await page.route('**/api/analyze', (route) => route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify({
+      purchaseDate: '2026-11-23',
+      items: [{ name: '牛乳', storage: 'fridge', expiryDate: '2026-12-01', quantity: '1本' }],
+    }),
+  }));
+
+  await page.setInputFiles('#gallery-input', ICON_PATH);
+  await page.click('#preview-confirm');
+  const row = page.locator('#result-items .result-row');
+  await expect(row.locator('.field-selected')).not.toBeChecked();
+  await row.locator('.field-selected').check();
+  await page.click('#result-save');
+
+  await expect(page.locator('#item-count')).toHaveText('1件');
+  await expect(page.locator('.item-quantity')).toHaveText('2本 + 1本');
+});
+
 test('shopping list suggestions come from consumed items', async ({ page }) => {
   await page.goto('/');
   await resetStorage(page);
