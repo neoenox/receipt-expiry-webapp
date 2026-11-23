@@ -1,4 +1,4 @@
-import { shouldSendAtHour } from '../../public/js/features2.js';
+import { jstDate, shouldSendAtHour } from '../../public/js/features2.js';
 
 export const REMINDER_TITLE = 'レシート賞味期限';
 const REMINDER_BODY = 'まもなく賞味期限の食材があります。アプリを開いて確認してください。';
@@ -21,7 +21,7 @@ export async function sendReminders({ kv, sendNotification, vapid, now = new Dat
   const { publicKey, privateKey } = vapid || {};
   if (!publicKey || !privateKey) return 0;
 
-  const today = now.toISOString().slice(0, 10);
+  const today = jstDate(now);
   let cursor;
   let sent = 0;
   do {
@@ -36,7 +36,8 @@ export async function sendReminders({ kv, sendNotification, vapid, now = new Dat
         continue;
       }
       if (!entry?.subscription?.endpoint || !entry.nextExpiry || entry.nextExpiry > today) continue;
-      if (!shouldSendAtHour(entry, now)) continue;
+      const notifiedDate = entry.notifiedAt ? jstDate(new Date(entry.notifiedAt)) : null;
+      if (!shouldSendAtHour(entry, now, notifiedDate)) continue;
 
       try {
         await sendNotification(
