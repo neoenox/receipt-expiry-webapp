@@ -53,6 +53,7 @@ escape_env() {
   printf 'VAPID_PUBLIC_KEY="%s"\n' "$(escape_env "$VAPID_PUBLIC_KEY")"
   printf 'VAPID_PRIVATE_KEY="%s"\n' "$(escape_env "$VAPID_PRIVATE_KEY")"
   printf 'DATA_DIR=/var/lib/receipt-expiry\n'
+  printf 'PUBLIC_ORIGIN="https://%s"\n' "$DOMAIN"
 } > /etc/receipt-expiry.env
 mkdir -p /var/lib/receipt-expiry
 chown www-data:www-data /var/lib/receipt-expiry

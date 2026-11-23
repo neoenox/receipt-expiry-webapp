@@ -42,6 +42,8 @@ function publicOrigin(request) {
 function apiEnv() {
   return {
     GEMINI_API_KEY: process.env.GEMINI_API_KEY || '',
+    // Origin 判定は環境変数のみを信用する（Host ヘッダは偽装可能）。
+    PUBLIC_ORIGIN: process.env.PUBLIC_ORIGIN || '',
     VAPID_PUBLIC_KEY: process.env.VAPID_PUBLIC_KEY || '',
     RATE_LIMIT_KV: KV,
     PUSH_KV: KV,

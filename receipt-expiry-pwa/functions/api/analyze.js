@@ -210,7 +210,7 @@ async function geminiFailureMessage(response, usingCustomKey) {
 export async function onRequestPost(context) {
   const { request, env } = context;
 
-  const rejected = requireSameOriginJson(request);
+  const rejected = requireSameOriginJson(request, env?.PUBLIC_ORIGIN);
   if (rejected) return rejected;
 
   const parsed = await readJsonWithLimit(request, MAX_BODY_BYTES);

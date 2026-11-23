@@ -30,7 +30,7 @@ async function isRateLimited(request, env) {
 }
 
 export async function onRequestPost({ request, env }) {
-  const rejected = requireSameOriginJson(request);
+  const rejected = requireSameOriginJson(request, env?.PUBLIC_ORIGIN);
   if (rejected) return rejected;
 
   try {

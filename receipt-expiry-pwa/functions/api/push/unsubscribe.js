@@ -4,7 +4,7 @@ const MAX_BODY_BYTES = 2048;
 const SUB_COUNT_KEY = 'subcount:total';
 
 export async function onRequestPost({ request, env }) {
-  const rejected = requireSameOriginJson(request);
+  const rejected = requireSameOriginJson(request, env?.PUBLIC_ORIGIN);
   if (rejected) return rejected;
 
   const parsed = await readJsonWithLimit(request, MAX_BODY_BYTES);
