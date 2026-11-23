@@ -5,7 +5,9 @@ import { createQueuedAnalysis } from './queue.js';
 import { createConsumption, summarizeHistory } from './history.js';
 import { createExpiryHint, buildHintMap, normalizeFoodName } from './learning.js';
 import { filterAndSortItems } from './inventory.js';
-import { buildShoppingSuggestions, buildCalendar } from './features2.js';
+import { buildShoppingSuggestions } from './features2.js';
+import { createCalendarUI } from './calendarUI.js';
+import { analyzePayloads } from './analysisFlow.js';
 import { createSettings, applyStoredTheme } from './settings.js';
 import { createQueueUI } from './queueUI.js';
 
@@ -97,6 +99,9 @@ const state = {
 
   savingKey: false,
 
+  byokApiKey: '',
+  processingPreview: false,
+
   previewFiles: [],
   previewIndex: 0,
   previewResults: [],
@@ -105,6 +110,8 @@ const state = {
   calendarMonth: new Date().getMonth(),
 };
 
+
+const calendarUI = createCalendarUI({ ui, state });
 
 const queueUI = createQueueUI({ ui, state, showToast, submitAnalysis });
 const settings = createSettings({
@@ -172,6 +179,11 @@ function openModal(element) {
 }
 
 function closeModal(element) {
+  if (element === ui.previewModal && ui.previewImage.src.startsWith('blob:')) {
+    URL.revokeObjectURL(ui.previewImage.src);
+    ui.previewImage.removeAttribute('src');
+    state.previewFiles = [];
+  }
   element.classList.add('hidden');
   state.modalStack = state.modalStack.filter((item) => item !== element);
   const top = state.modalStack[state.modalStack.length - 1];
@@ -200,7 +212,7 @@ async function refreshItems() {
   state.items = await getAllItemsSorted();
   renderList();
 
-  void settings.syncPushReminder();
+  await settings.syncPushReminder();
 }
 
 function renderList() {
@@ -290,8 +302,10 @@ function cropOptions() {
 }
 
 async function confirmPreview() {
+  if (state.processingPreview) return;
   const file = state.previewFiles[state.previewIndex];
   if (!file) return;
+  state.processingPreview = true;
   showLoading(true);
   try {
     const { base64, mimeType } = await processReceiptImage(file, {
@@ -309,43 +323,64 @@ async function confirmPreview() {
   } catch (error) {
     showToast(error.message || '画像を処理できませんでした。');
   } finally {
+    state.processingPreview = false;
     showLoading(false);
   }
 }
 
-async function submitProcessed(payloads) {
-  if (!navigator.onLine) {
-    for (const payload of payloads) await enqueueAnalysis(createQueuedAnalysis(payload));
-    await queueUI.refreshQueueStatus();
-    showToast(`${payloads.length}件をオフラインキューに保存しました。`);
-    return;
-  }
-  await submitAnalyses(payloads);
+/** 解析に失敗した payload をキューへ戻し、件数を返す。 */
+async function queueFailedPayloads(failedPayloads, message) {
+  for (const payload of failedPayloads) await enqueueAnalysis(createQueuedAnalysis(payload));
+  if (failedPayloads.length) await queueUI.refreshQueueStatus();
+  if (message) showToast(message);
+  return failedPayloads.length;
 }
 
+async function submitProcessed(payloads) {
+  if (!navigator.onLine) {
+    await queueFailedPayloads(payloads, `${payloads.length}件をオフラインキューに保存しました。`);
+    return;
+  }
+  const { failed } = await submitAnalyses(payloads);
+  if (failed) {
+    await queueFailedPayloads(failed, `${failed}件を解析キューに保存しました。接続復帰後に再試行します。`);
+  }
+}
+
+function reportMetric(kind) {
+  void fetch('/api/metrics', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ kind }),
+  }).catch(() => {});
+}
+
+/**
+ * 解析結果と失敗 payload を返す。失敗分は呼び出し側がキューへ戻す。
+ * 500 系など再試行しないエラーでも payload を失わない。
+ */
 async function submitAnalyses(payloads) {
   showLoading(true);
   try {
-    const allItems = [];
-    let purchaseDate = null;
-    for (const payload of payloads) {
-      try {
-        const result = await analyzeReceipt({ ...payload, customApiKey: settings.getApiKey() || undefined });
-        if (!purchaseDate && result.purchaseDate) purchaseDate = result.purchaseDate;
-        allItems.push(...result.items);
-      } catch (error) {
-        showToast(error.message || '解析に失敗しました。');
-      }
-    }
-    if (allItems.length) openResultModal({ purchaseDate, items: allItems });
-    else showToast('食材が見つかりませんでした。');
+    const summary = await analyzePayloads(payloads, {
+      analyzeReceipt,
+      getApiKey: settings.getApiKey,
+      onMetric: reportMetric,
+      onError: (error) => showToast(error.message || '解析に失敗しました。'),
+    });
+    const failed = summary.results.filter((entry) => !entry.ok).map((entry) => entry.payload);
+    if (summary.items.length) openResultModal({ purchaseDate: summary.purchaseDate, items: summary.items });
+    else if (!failed.length) showToast('食材が見つかりませんでした。');
+    return { ...summary, failed };
   } finally {
     showLoading(false);
   }
 }
 
+/** 単一画像の解析。失敗時は throw し、キュー側の試行回数管理を動かす。 */
 async function submitAnalysis(payload) {
-  await submitAnalyses([payload]);
+  const { failed } = await submitAnalyses([payload]);
+  if (failed.length) throw new Error('解析に失敗しました。');
 }
 
 
@@ -546,63 +581,6 @@ async function openShopping() {
   openModal(ui.shoppingModal);
 }
 
-function renderCalendar() {
-  const days = buildCalendar(state.items, state.calendarYear, state.calendarMonth);
-  const firstDay = new Date(state.calendarYear, state.calendarMonth, 1).getDay();
-  const dayCount = new Date(state.calendarYear, state.calendarMonth + 1, 0).getDate();
-  const grid = document.createElement('div');
-  grid.className = 'calendar-grid';
-  const header = document.createElement('div');
-  header.className = 'calendar-header';
-  const prev = document.createElement('button');
-  prev.type = 'button';
-  prev.dataset.calendar = 'prev';
-  prev.textContent = '‹';
-  const label = document.createElement('strong');
-  label.textContent = `${state.calendarYear}年 ${state.calendarMonth + 1}月`;
-  const next = document.createElement('button');
-  next.type = 'button';
-  next.dataset.calendar = 'next';
-  next.textContent = '›';
-  header.append(prev, label, next);
-  for (let i = 0; i < firstDay; i += 1) {
-    const empty = document.createElement('div');
-    empty.className = 'calendar-cell is-empty';
-    grid.append(empty);
-  }
-  for (let day = 1; day <= dayCount; day += 1) {
-    const cell = document.createElement('div');
-    cell.className = 'calendar-cell';
-    const number = document.createElement('div');
-    number.className = 'calendar-day';
-    number.textContent = String(day);
-    cell.append(number);
-    for (const item of days.get(day) || []) {
-      const name = document.createElement('div');
-      name.className = 'calendar-item';
-      name.textContent = item.name;
-      cell.append(name);
-    }
-    grid.append(cell);
-  }
-  ui.calendarView.replaceChildren(header, grid);
-}
-
-function toggleView() {
-  const showingCalendar = !ui.calendarView.classList.contains('hidden');
-  if (showingCalendar) {
-    ui.calendarView.classList.add('hidden');
-    ui.list.classList.remove('hidden');
-    ui.emptyState.classList.toggle('hidden', state.items.length > 0);
-    ui.viewToggle.textContent = 'カレンダー';
-  } else {
-    renderCalendar();
-    ui.calendarView.classList.remove('hidden');
-    ui.list.classList.add('hidden');
-    ui.emptyState.classList.add('hidden');
-    ui.viewToggle.textContent = '一覧';
-  }
-}
 
 
 function registerPWAEvents() {
@@ -689,15 +667,11 @@ function wireEvents() {
     }
   });
 
-  ui.viewToggle.addEventListener('click', toggleView);
+  ui.viewToggle.addEventListener('click', calendarUI.toggle);
   ui.calendarView.addEventListener('click', (event) => {
     const direction = event.target.dataset.calendar;
     if (!direction) return;
-    if (direction === 'prev') state.calendarMonth -= 1;
-    else state.calendarMonth += 1;
-    if (state.calendarMonth < 0) { state.calendarMonth = 11; state.calendarYear -= 1; }
-    if (state.calendarMonth > 11) { state.calendarMonth = 0; state.calendarYear += 1; }
-    renderCalendar();
+    calendarUI.shift(direction);
   });
 
   ui.resultItems.addEventListener('click', (event) => {
@@ -789,7 +763,6 @@ async function init() {
     state.expiryHints = buildHintMap(await listExpiryHints());
     await queueUI.refreshQueueStatus();
 
-    await settings.syncPushReminder();
     await refreshHistorySummary();
 
     await refreshShopping();

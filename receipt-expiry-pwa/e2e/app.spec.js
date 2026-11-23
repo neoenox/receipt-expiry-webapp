@@ -12,6 +12,7 @@ async function resetStorage(page) {
       request.onblocked = resolve;
     });
     localStorage.clear();
+    localStorage.setItem('receipt-expiry-ad-consent', 'granted');
   });
   await page.reload();
   await expect(page.locator('#item-count')).toHaveText('0件');
@@ -59,7 +60,7 @@ test('inventory add, search, sort, consume, and backup round-trip', async ({ pag
   let text = '';
   for await (const chunk of stream) text += chunk.toString();
   const backup = JSON.parse(text);
-  expect(backup.version).toBe(2);
+  expect(backup.version).toBe(3);
   expect(backup.items).toHaveLength(1);
   expect(backup.history).toHaveLength(1);
 
@@ -75,6 +76,8 @@ test('inventory add, search, sort, consume, and backup round-trip', async ({ pag
     buffer: Buffer.from(text),
   });
   await expect(page.locator('#backup-status')).toContainText('在庫1件・履歴1件');
+  expect(backup.shopping).toEqual([]);
+  expect(backup.settings.theme).toBeTruthy();
   await page.keyboard.press('Escape');
   await expect(page.locator('#item-count')).toHaveText('2件');
   await expect(page.locator('.item-name', { hasText: 'テスト牛乳' })).toBeVisible();
@@ -85,6 +88,9 @@ test('offline analysis is queued and retried after reconnection', async ({ page 
   await page.goto('/');
   await resetStorage(page);
 
+  // ネットワーク切断を明示的に注入し、ローカルサーバーが生きていても
+  // 解析リクエストが確実に失敗するようにする。
+  await page.route('**/api/analyze', (route) => route.abort('internetdisconnected'));
   await page.context().setOffline(true);
   await page.setInputFiles('#gallery-input', ICON_PATH);
 
@@ -98,6 +104,7 @@ test('offline analysis is queued and retried after reconnection', async ({ page 
   await expect(page.locator('#queue-status')).toContainText('未送信の解析: 1件');
   await expect(page.locator('.queue-row')).toHaveCount(1);
 
+  await page.unroute('**/api/analyze');
   await page.route('**/api/analyze', (route) => route.fulfill({
     status: 200,
     contentType: 'application/json',
@@ -142,8 +149,12 @@ test('BYOK key is validated before it is stored', async ({ page }) => {
   }));
   await page.fill('#api-key-input', 'valid-key');
   await page.click('#save-api-key');
-  await expect(page.locator('#api-key-status')).toContainText('保存しました');
-  expect(await page.evaluate(() => localStorage.getItem('receipt-expiry-gemini-key'))).toBe('valid-key');
+  await expect(page.locator('#api-key-status')).toContainText('このセッションでのみ使用');
+  expect(await page.evaluate(() => localStorage.getItem('receipt-expiry-gemini-key'))).toBeNull();
+  await page.reload();
+  await page.click('#settings-btn');
+  await page.click('[data-settings-tab="data"]');
+  await expect(page.locator('#api-key-status')).toContainText('共通キーで解析します');
 });
 
 test('dark mode changes the page background', async ({ page }) => {
@@ -226,13 +237,23 @@ test('shopping list suggestions come from consumed items', async ({ page }) => {
   await expect(page.locator('.item-name')).toHaveText('牛乳');
 });
 
-test('calendar view groups items by expiry date', async ({ page }) => {
+test('calendar view groups items by expiry date and advances one month per click', async ({ page }) => {
   await page.goto('/');
   await resetStorage(page);
   await addItem(page, '牛乳', `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}-05`);
   await page.click('#view-toggle');
   await expect(page.locator('#calendar-view')).toBeVisible();
   await expect(page.locator('#calendar-view')).toContainText('牛乳');
+
+  const label = page.locator('#calendar-view .calendar-header strong');
+  const before = await label.textContent();
+  await page.locator('[data-calendar="next"]').click();
+  const after = await label.textContent();
+  const [year, month] = before.match(/(\d+)年 (\d+)月/).slice(1).map(Number);
+  const expectedMonth = month === 12 ? 1 : month + 1;
+  const expectedYear = month === 12 ? year + 1 : year;
+  expect(after).toBe(`${expectedYear}年 ${expectedMonth}月`);
+
   await page.click('#view-toggle');
   await expect(page.locator('#item-list')).toBeVisible();
 });
@@ -244,5 +265,16 @@ test('support tab exposes sponsor link and ad status', async ({ page }) => {
   await page.click('#settings-btn');
   await page.click('[data-settings-tab="support"]');
   await expect(page.locator('#support-link')).toHaveAttribute('href', 'https://github.com/sponsors/neoenox');
-  await expect(page.locator('#ad-status')).toContainText('広告は現在無効');
+  await expect(page.locator('#ad-status')).toContainText('広告');
+});
+
+
+test('ad consent is required before ads load', async ({ page }) => {
+  await page.goto('/');
+  await page.evaluate(() => localStorage.removeItem('receipt-expiry-ad-consent'));
+  await page.reload();
+  await expect(page.locator('#ad-consent')).toBeVisible();
+  await page.click('#ad-consent-decline');
+  await expect(page.locator('#ad-consent')).toBeHidden();
+  await expect(page.locator('#ad-status')).toContainText('無効');
 });

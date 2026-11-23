@@ -291,7 +291,7 @@
         </section>
         <section class="settings-section">
           <h3>自分の Gemini API キー（BYOK）</h3>
-          <p class="hint">この端末の localStorage にのみ保存されます。</p>
+          <p class="hint">このセッションでのみ使用し、再読み込みすると消去されます。</p>
           <label class="field">Gemini API キー
             <input id="api-key-input" type="password" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="AIzaSy...">
           </label>
@@ -321,6 +321,15 @@
       <button id="settings-close" class="btn is-ghost" type="button">閉じる</button>
     </div>
   </div>
+
+  <div id="ad-consent" class="ad-consent hidden" role="region" aria-label="広告の同意">
+    <p>広告の配信と測定に Google のクッキーを使用してもよろしいですか？</p>
+    <div class="inline-actions">
+      <button id="ad-consent-accept" class="btn is-primary" type="button">同意する</button>
+      <button id="ad-consent-decline" class="btn is-ghost" type="button">同意しない</button>
+    </div>
+  </div>
+
 
   <div id="toast" class="toast hidden" role="status" aria-live="polite"></div>
 

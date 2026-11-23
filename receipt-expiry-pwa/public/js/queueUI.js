@@ -33,24 +33,30 @@ export function createQueueUI({ ui, state, showToast, submitAnalysis }) {
   }
 
   async function retryQueueJob(id) {
-    const jobs = await listQueuedAnalyses();
-    const job = jobs.find((entry) => entry.id === id);
-    if (!job) return;
+    if (state.processingQueue) return;
+    state.processingQueue = true;
     try {
-      await submitAnalysis({ imageBase64: job.imageBase64, mimeType: job.mimeType, clientDate: job.clientDate });
-      await deleteQueuedAnalysis(id);
-      showToast('解析が完了しました。');
-    } catch (error) {
-      const attempted = nextAttempt(job);
-      if (shouldDiscard(attempted)) {
+      const jobs = await listQueuedAnalyses();
+      const job = jobs.find((entry) => entry.id === id);
+      if (!job) return;
+      try {
+        await submitAnalysis({ imageBase64: job.imageBase64, mimeType: job.mimeType, clientDate: job.clientDate });
         await deleteQueuedAnalysis(id);
-        showToast('解析できなかったため削除しました。');
-      } else {
-        await updateQueuedAnalysis(attempted);
-        showToast(`再試行できませんでした: ${error.message || '不明なエラー'}`);
+        showToast('解析が完了しました。');
+      } catch (error) {
+        const attempted = nextAttempt(job);
+        if (shouldDiscard(attempted)) {
+          await deleteQueuedAnalysis(id);
+          showToast('解析できなかったため削除しました。');
+        } else {
+          await updateQueuedAnalysis(attempted);
+          showToast(`再試行できませんでした: ${error.message || '不明なエラー'}`);
+        }
       }
+      await refreshQueueStatus();
+    } finally {
+      state.processingQueue = false;
     }
-    await refreshQueueStatus();
   }
 
   async function deleteQueueJob(id) {

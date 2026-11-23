@@ -193,13 +193,21 @@ export function importExpiryHints(hints) {
 }
 
 
-/** バックアップの置き換え復元前に全ストアを空にする。 */
+/** 全ストアを1トランザクションで空にする（途中終了で中途半端な状態にならない）。 */
 export function clearAllData() {
-  return withStore('readwrite', (store) => { store.clear(); }, STORE.items)
-    .then(() => withStore('readwrite', (store) => { store.clear(); }, STORE.queue))
-    .then(() => withStore('readwrite', (store) => { store.clear(); }, STORE.history))
-    .then(() => withStore('readwrite', (store) => { store.clear(); }, STORE.hints))
-    .then(() => withStore('readwrite', (store) => { store.clear(); }, STORE.shopping));
+  const stores = Object.values(STORE);
+  return initDB().then((db) => new Promise((resolve, reject) => {
+    const tx = db.transaction(stores, 'readwrite');
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error || new Error('データベース処理に失敗しました。'));
+    tx.onabort = () => reject(tx.error || new Error('データベース処理が中止されました。'));
+    try {
+      for (const name of stores) tx.objectStore(name).clear();
+    } catch (error) {
+      tx.abort();
+      reject(error);
+    }
+  }));
 }
 
 

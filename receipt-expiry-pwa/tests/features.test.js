@@ -4,7 +4,8 @@ import { createQueuedAnalysis, nextAttempt, shouldDiscard, MAX_QUEUE_ATTEMPTS } 
 import { createConsumption, summarizeHistory } from '../public/js/history.js';
 import { normalizeFoodName, createExpiryHint, buildHintMap } from '../public/js/learning.js';
 import { filterAndSortItems } from '../public/js/inventory.js';
-import { buildShoppingSuggestions, buildCalendar, cropRect, shouldSendAtHour } from '../public/js/features2.js';
+import { buildShoppingSuggestions, buildCalendar, shiftMonth, cropRect, shouldSendAtHour, isSubscriptionRateLimited, retryDelayMs } from '../public/js/features2.js';
+import { analyzePayloads } from '../public/js/analysisFlow.js';
 import { dataUrlMime, base64FromDataUrl, nextQuality } from '../public/js/imageOptions.js';
 import { daysUntilDate } from '../public/js/dates.js';
 import { buildReminderBody } from '../notify-worker/index.js';
@@ -100,6 +101,12 @@ test('calendar groups items by expiry day within the requested month', () => {
   assert.equal(days.has(1), false);
 });
 
+test('month shift advances exactly one month and wraps the year', () => {
+  assert.deepEqual(shiftMonth(2026, 10, 'next'), { year: 2026, month: 11 });
+  assert.deepEqual(shiftMonth(2026, 11, 'next'), { year: 2027, month: 0 });
+  assert.deepEqual(shiftMonth(2026, 0, 'prev'), { year: 2025, month: 11 });
+});
+
 test('crop rect respects rotation and bounds', () => {
   assert.deepEqual(cropRect(100, 200, { left: 0.1, right: 0.2, top: 0.25, bottom: 0.05 }), {
     x: 10, y: 50, width: 70, height: 140,
@@ -111,4 +118,66 @@ test('notification hour is evaluated in JST', () => {
   const now = new Date('2026-11-23T21:00:00Z');
   assert.equal(shouldSendAtHour({ notifyHour: 6 }, now), true);
   assert.equal(shouldSendAtHour({ notifyHour: 7 }, now), false);
+});
+
+
+test('subscription writes are rate limited', () => {
+  assert.equal(isSubscriptionRateLimited(5, 10), false);
+  assert.equal(isSubscriptionRateLimited(11, 10), true);
+  assert.equal(isSubscriptionRateLimited(1, 1000), true);
+});
+
+
+test('retry delay respects Retry-After but is capped', () => {
+  assert.equal(retryDelayMs(500, 5), 0);
+  assert.equal(retryDelayMs(429, 1), 1000);
+  assert.equal(retryDelayMs(429, 60), 5000);
+});
+
+
+test('analysis flow retries 429 and merges results', async () => {
+  let calls = 0;
+  const metrics = [];
+  const result = await analyzePayloads(
+    [{ imageBase64: 'a' }, { imageBase64: 'b' }],
+    {
+      analyzeReceipt: async () => {
+        calls += 1;
+        if (calls === 1) {
+          const error = new Error('rate limited');
+          error.status = 429;
+          error.retryAfter = 0.001;
+          throw error;
+        }
+        return { purchaseDate: '2026-11-23', items: [{ name: `item${calls}` }] };
+      },
+      onMetric: (kind) => metrics.push(kind),
+    }
+  );
+  assert.equal(calls, 3);
+  assert.equal(result.items.length, 2);
+  assert.equal(result.errors, 0);
+  assert.deepEqual(metrics, ['success', 'success']);
+  assert.deepEqual(result.results.map((entry) => entry.ok), [true, true]);
+});
+
+test('analysis flow reports the exact payload that failed so it can be requeued', async () => {
+  const errors = [];
+  const result = await analyzePayloads(
+    [{ imageBase64: 'ok' }, { imageBase64: 'bad' }],
+    {
+      analyzeReceipt: async ({ imageBase64 }) => {
+        if (imageBase64 === 'bad') throw new Error('解析できません');
+        return { purchaseDate: '2026-11-23', items: [{ name: '牛乳' }] };
+      },
+      onError: (error) => errors.push(error.message),
+    }
+  );
+
+  assert.equal(result.errors, 1);
+  assert.equal(result.items.length, 1);
+  assert.deepEqual(errors, ['解析できません']);
+  assert.deepEqual(result.results.map((entry) => entry.ok), [true, false]);
+  assert.deepEqual(result.results[1].payload, { imageBase64: 'bad' });
+  assert.deepEqual(result.failed ?? result.results.filter((entry) => !entry.ok).map((entry) => entry.payload), [{ imageBase64: 'bad' }]);
 });

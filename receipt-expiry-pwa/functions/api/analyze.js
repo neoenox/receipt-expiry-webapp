@@ -1,8 +1,14 @@
+import { errorResponse, json, readJsonWithLimit, requireSameOriginJson, clientIp } from '../shared/http.js';
+
 const MAX_IMAGE_CHARS = 2_800_000;
+const MAX_BODY_BYTES = MAX_IMAGE_CHARS + 4096;
 const MAX_ITEMS = 50;
 const GEMINI_TIMEOUT_MS = 20_000;
 const RATE_PER_MINUTE = 5;
 const RATE_PER_DAY = 20;
+// BYOK はユーザー自身の枠だが、共有キーへのバイパスに使われないよう最低限の制限を残す。
+const BYOK_RATE_PER_MINUTE = 30;
+const BYOK_RATE_PER_DAY = 200;
 const VALID_STORAGE = new Set(['fridge', 'freezer', 'pantry']);
 
 // Cloudflare では KV バインディングで全拠点共通のカウンタを使う。
@@ -34,20 +40,6 @@ const responseSchema = {
   required: ['purchaseDate', 'items'],
 };
 
-function json(body, status = 200) {
-  return new Response(JSON.stringify(body), {
-    status,
-    headers: {
-      'Content-Type': 'application/json; charset=utf-8',
-      'Cache-Control': 'no-store',
-    },
-  });
-}
-
-function errorResponse(status, code, message) {
-  return json({ error: { code, message } }, status);
-}
-
 function isValidDateString(value) {
   if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
   const [year, month, day] = value.split('-').map(Number);
@@ -65,13 +57,6 @@ function addDays(dateString, days) {
   return date.toISOString().slice(0, 10);
 }
 
-function clientIp(request) {
-  // X-Forwarded-For はクライアントが偽装できるため使わない。
-  return request.headers.get('CF-Connecting-IP')
-    || request.headers.get('X-Real-IP')
-    || 'unknown';
-}
-
 function bucketKeys(ip, now) {
   const minute = Math.floor(now / 60_000);
   const day = new Date(now).toISOString().slice(0, 10);
@@ -83,19 +68,22 @@ function bucketKeys(ip, now) {
   };
 }
 
-/** 共有キー利用時のみ適用。BYOKはユーザー自身の枠なので制限しない。 */
-async function isRateLimited(request, env) {
-  const ip = clientIp(request);
+/** 共有キーは厳しく、BYOK は緩い枠で常にレート制限する（バイパス防止）。 */
+async function isRateLimited(request, env, byok) {
+  const ip = `${byok ? 'byok' : 'shared'}:${clientIp(request)}`;
   const now = Date.now();
+  const minuteLimit = byok ? BYOK_RATE_PER_MINUTE : RATE_PER_MINUTE;
+  const dayLimit = byok ? BYOK_RATE_PER_DAY : RATE_PER_DAY;
 
   const durable = env?.RATE_LIMITER_DO;
   if (durable && typeof durable.idFromName === 'function') {
     try {
       const id = durable.idFromName(ip);
       const stub = durable.get(id);
+      // now は送らない。Durable Object 側で時刻を生成しないと過去時刻でリセットできる。
       const response = await stub.fetch('https://rate-limiter/', {
         method: 'POST',
-        body: JSON.stringify({ now }),
+        body: JSON.stringify({ byok }),
       });
       const result = await response.json();
       return Boolean(result.limited);
@@ -119,7 +107,7 @@ async function isRateLimited(request, env) {
         kv.put(minuteKey, String(minuteCount), { expirationTtl: minuteTtl }),
         kv.put(dayKey, String(dayCount), { expirationTtl: dayTtl }),
       ]);
-      return minuteCount > RATE_PER_MINUTE || dayCount > RATE_PER_DAY;
+      return minuteCount > minuteLimit || dayCount > dayLimit;
     } catch {
       // Shared-key requests must fail closed when the global counter is unavailable.
       throw new Error('RATE_LIMIT_STORAGE_UNAVAILABLE');
@@ -143,7 +131,7 @@ async function isRateLimited(request, env) {
     }
   }
   localRateBuckets.set(ip, bucket);
-  return bucket.minuteCount > RATE_PER_MINUTE || bucket.dayCount > RATE_PER_DAY;
+  return bucket.minuteCount > minuteLimit || bucket.dayCount > dayLimit;
 }
 
 function buildPrompt(clientDate) {
@@ -222,31 +210,17 @@ async function geminiFailureMessage(response, usingCustomKey) {
 export async function onRequestPost(context) {
   const { request, env } = context;
 
-  // 同一オリジンのフロントエンドからのみ許可する。
-  const origin = request.headers.get('Origin');
-  if (origin) {
-    let allowedOrigin;
-    try {
-      allowedOrigin = new URL(request.url).origin;
-    } catch {
-      return errorResponse(400, 'INVALID_REQUEST', 'リクエストが正しくありません。');
-    }
-    if (origin !== allowedOrigin) {
-      return errorResponse(403, 'FORBIDDEN', 'このリクエストは許可されていません。');
-    }
-  }
+  const rejected = requireSameOriginJson(request);
+  if (rejected) return rejected;
 
-  const contentLength = Number(request.headers.get('Content-Length') || 0);
-  if (contentLength > MAX_IMAGE_CHARS + 4096) {
-    return errorResponse(400, 'PAYLOAD_TOO_LARGE', '画像データが大きすぎます。');
+  const parsed = await readJsonWithLimit(request, MAX_BODY_BYTES);
+  if (parsed.tooLarge) {
+    return errorResponse(413, 'PAYLOAD_TOO_LARGE', '画像データが大きすぎます。');
   }
-
-  let body;
-  try {
-    body = await request.json();
-  } catch {
+  if (parsed.invalid) {
     return errorResponse(400, 'INVALID_REQUEST', 'リクエストの形式が正しくありません。');
   }
+  const body = parsed.body;
 
   const imageBase64 = typeof body?.imageBase64 === 'string' ? body.imageBase64.trim() : '';
   if (!imageBase64 || imageBase64.length > MAX_IMAGE_CHARS || !/^[A-Za-z0-9+/]+={0,2}$/.test(imageBase64)) {
@@ -259,14 +233,14 @@ export async function onRequestPost(context) {
   if (!apiKey) {
     return errorResponse(500, 'API_KEY_NOT_CONFIGURED', '解析用のAPIキーが未設定です。設定画面からご自身のGemini APIキーを登録するか、運用者に共通キーの設定を依頼してください。');
   }
-  if (!customApiKey) {
-    try {
-      if (await isRateLimited(request, env)) {
-        return errorResponse(429, 'RATE_LIMIT_EXCEEDED', '解析リクエストの上限に達しました。しばらく待つか、設定画面からご自身のAPIキーをご利用ください。');
-      }
-    } catch {
-      return errorResponse(503, 'RATE_LIMIT_UNAVAILABLE', '共通キーの利用制限を確認できません。しばらくして再度お試しください。');
+  // BYOK でも共有キーでも必ず制限する。customApiKey を付けるだけで
+  // 共有キー枠を回避できると、無料枠がいくらでも消費されてしまう。
+  try {
+    if (await isRateLimited(request, env, Boolean(customApiKey))) {
+      return errorResponse(429, 'RATE_LIMIT_EXCEEDED', '解析リクエストの上限に達しました。しばらく待ってから再度お試しください。');
     }
+  } catch {
+    return errorResponse(503, 'RATE_LIMIT_UNAVAILABLE', '利用制限を確認できません。しばらくして再度お試しください。');
   }
 
   const clientDate = isValidDateString(body.clientDate) ? body.clientDate : todayString();
