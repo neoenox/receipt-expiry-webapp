@@ -92,7 +92,12 @@ export function createSettings({ ui, state, byId, showToast, openModal, todayISO
       ad_personalization: granted ? 'granted' : 'denied',
     });
     byId('ad-consent').classList.add('hidden');
-    if (granted) void loadMonetization();
+    if (granted) {
+      void loadMonetization();
+    } else {
+      byId('ad-status').textContent = '広告は無効に設定されています。';
+      byId('ad-slot').replaceChildren();
+    }
   }
 
   async function loadMonetization() {
@@ -201,7 +206,6 @@ export function createSettings({ ui, state, byId, showToast, openModal, todayISO
       }
       state.byokApiKey = key;
       ui.apiKeyStatus.textContent = 'APIキーを検証しました。このセッションでのみ使用します。';
-      }
     } catch {
       ui.apiKeyStatus.textContent = 'APIキーを検証できませんでした。通信環境を確認してください。';
     } finally {

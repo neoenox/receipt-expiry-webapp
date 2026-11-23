@@ -179,7 +179,7 @@ test('sends the key in a header and caps normalized items at 50', async (t) => {
   });
 
   const response = await onRequestPost({
-    request: makeRequest({ imageBase64: VALID_IMAGE }, { ip: '203.0.113.21' }),
+    request: makeRequest({ imageBase64: VALID_IMAGE }, { ip: '203.0.113.40' }),
     env: { GEMINI_API_KEY: 'shared-key' },
   });
   assert.equal(response.status, 200);

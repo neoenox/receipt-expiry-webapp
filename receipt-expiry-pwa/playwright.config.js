@@ -5,7 +5,7 @@ export default defineConfig({
   timeout: 60_000,
   use: {
     baseURL: 'http://127.0.0.1:4173',
-    channel: 'chrome',
+    // CI にシステム Chrome は入っていないため、Playwright 同梱 Chromium を使う。
     headless: true,
   },
   webServer: {

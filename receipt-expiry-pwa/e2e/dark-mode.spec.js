@@ -42,6 +42,9 @@ async function styles(page, selector, pseudo = null) {
 test('dark theme keeps key text readable', async ({ page }) => {
   await page.emulateMedia({ colorScheme: 'dark' });
   await page.goto('/');
+  // 広告同意のオーバーレイが操作を遮らないように先に同意を設定する。
+  await page.evaluate(() => localStorage.setItem('receipt-expiry-ad-consent', 'granted'));
+  await page.reload();
   await page.evaluate(async () => {
     await new Promise((resolve) => {
       const request = indexedDB.deleteDatabase('ReceiptExpiryDB');
@@ -73,6 +76,8 @@ test('dark theme keeps key text readable', async ({ page }) => {
 
 test('theme can be switched and persists across reloads', async ({ page }) => {
   await page.goto('/');
+  await page.evaluate(() => localStorage.setItem('receipt-expiry-ad-consent', 'granted'));
+  await page.reload();
   await page.click('#settings-btn');
 
   await page.selectOption('#theme-select', 'dark');

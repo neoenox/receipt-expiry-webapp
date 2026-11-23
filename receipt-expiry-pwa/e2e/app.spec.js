@@ -88,6 +88,9 @@ test('offline analysis is queued and retried after reconnection', async ({ page 
   await page.goto('/');
   await resetStorage(page);
 
+  // ネットワーク切断を明示的に注入し、ローカルサーバーが生きていても
+  // 解析リクエストが確実に失敗するようにする。
+  await page.route('**/api/analyze', (route) => route.abort('internetdisconnected'));
   await page.context().setOffline(true);
   await page.setInputFiles('#gallery-input', ICON_PATH);
 
@@ -101,6 +104,7 @@ test('offline analysis is queued and retried after reconnection', async ({ page 
   await expect(page.locator('#queue-status')).toContainText('未送信の解析: 1件');
   await expect(page.locator('.queue-row')).toHaveCount(1);
 
+  await page.unroute('**/api/analyze');
   await page.route('**/api/analyze', (route) => route.fulfill({
     status: 200,
     contentType: 'application/json',

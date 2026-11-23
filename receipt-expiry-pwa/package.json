@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "start": "node oci/server.js",
+    "test": "node --test tests/*.js",
     "test:e2e": "playwright test"
   },
   "devDependencies": {
