@@ -216,6 +216,10 @@ test('notification opt-in succeeds with a subscribed push manager', async ({ pag
   await expect.poll(() => subscribeRequests.length).toBeGreaterThan(0);
   expect(subscribeRequests[0].subscription.endpoint).toBe('https://example.test/e2e');
   expect(subscribeRequests[0].expiryDates).toContain('2026-12-20');
+
+  await page.selectOption('#notify-hour', '8');
+  await expect(page.locator('#notify-status')).toContainText('08:00');
+  await expect.poll(() => subscribeRequests.at(-1)?.notifyHour).toBe(8);
 });
 
 
