@@ -71,6 +71,7 @@ test('inventory add, search, sort, consume, and backup round-trip', async ({ pag
   await page.click('#settings-btn');
 
   await page.click('[data-settings-tab="data"]');
+  page.once('dialog', (dialog) => void dialog.accept());
   await page.setInputFiles('#backup-input', {
     name: 'backup.json',
     mimeType: 'application/json',
