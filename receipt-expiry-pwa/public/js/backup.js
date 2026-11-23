@@ -1,5 +1,5 @@
 const FORMAT = 'receipt-expiry-backup';
-const VERSION = 2;
+const VERSION = 3;
 const VALID_STORAGE = new Set(['fridge', 'freezer', 'pantry']);
 const VALID_REASONS = new Set(['eaten', 'discarded']);
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
@@ -58,6 +58,21 @@ function normalizeHint(raw, index) {
   if (typeof raw.updatedAt !== 'number' || !Number.isFinite(raw.updatedAt)) throw new Error(`バックアップの${label}の更新日時が不正です。`);
   return { name: raw.name.trim().slice(0, 80), expiryDate: raw.expiryDate, updatedAt: raw.updatedAt };
 }
+function normalizeShopping(raw, index) {
+  const label = `買い物${index + 1}行目`;
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) throw new Error(`バックアップの${label}が不正です。`);
+  if (typeof raw.id !== 'string' || !raw.id) throw new Error(`バックアップの${label}にIDがありません。`);
+  if (typeof raw.name !== 'string' || !raw.name.trim()) throw new Error(`バックアップの${label}に食材名がありません。`);
+  if (typeof raw.createdAt !== 'number' || !Number.isFinite(raw.createdAt)) throw new Error(`バックアップの${label}の登録日時が不正です。`);
+  return { id: raw.id, name: raw.name.trim().slice(0, 80), createdAt: raw.createdAt };
+}
+
+function normalizeSettings(raw) {
+  const source = raw || {};
+  const theme = ['auto', 'light', 'dark'].includes(source.theme) ? source.theme : 'auto';
+  const hour = Number.isFinite(source.notifyHour) ? Math.max(0, Math.min(23, Math.round(source.notifyHour))) : 6;
+  return { theme, notifyHour: hour, notifyEnabled: Boolean(source.notifyEnabled) };
+}
 
 function mergeByKey(items, keyOf) {
   const map = new Map();
@@ -74,6 +89,9 @@ export function serializeBackup(data) {
     items: (source.items || []).map(normalizeItem),
     history: (source.history || []).map(normalizeHistory),
     hints: (source.hints || []).map(normalizeHint),
+
+    shopping: (source.shopping || []).map(normalizeShopping),
+    settings: normalizeSettings(source.settings),
   }, null, 2);
 }
 
@@ -93,9 +111,13 @@ export function parseBackup(text) {
   const items = (data.items || []).map(normalizeItem);
   const history = (data.history || []).map(normalizeHistory);
   const hints = (data.hints || []).map(normalizeHint);
+  const shopping = (data.shopping || []).map(normalizeShopping);
+  const settings = normalizeSettings(data.settings);
   return {
     items: mergeByKey(items, (item) => item.id),
     history: mergeByKey(history, (entry) => entry.id),
     hints: mergeByKey(hints, (hint) => hint.name),
+    shopping: mergeByKey(shopping, (entry) => entry.id),
+    settings,
   };
 }

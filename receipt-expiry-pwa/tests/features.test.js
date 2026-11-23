@@ -4,7 +4,8 @@ import { createQueuedAnalysis, nextAttempt, shouldDiscard, MAX_QUEUE_ATTEMPTS } 
 import { createConsumption, summarizeHistory } from '../public/js/history.js';
 import { normalizeFoodName, createExpiryHint, buildHintMap } from '../public/js/learning.js';
 import { filterAndSortItems } from '../public/js/inventory.js';
-import { buildShoppingSuggestions, buildCalendar, cropRect, shouldSendAtHour } from '../public/js/features2.js';
+import { buildShoppingSuggestions, buildCalendar, cropRect, shouldSendAtHour, isSubscriptionRateLimited, retryDelayMs } from '../public/js/features2.js';
+import { analyzePayloads } from '../public/js/analysisFlow.js';
 import { dataUrlMime, base64FromDataUrl, nextQuality } from '../public/js/imageOptions.js';
 import { daysUntilDate } from '../public/js/dates.js';
 import { buildReminderBody } from '../notify-worker/index.js';
@@ -111,4 +112,44 @@ test('notification hour is evaluated in JST', () => {
   const now = new Date('2026-11-23T21:00:00Z');
   assert.equal(shouldSendAtHour({ notifyHour: 6 }, now), true);
   assert.equal(shouldSendAtHour({ notifyHour: 7 }, now), false);
+});
+
+
+test('subscription writes are rate limited', () => {
+  assert.equal(isSubscriptionRateLimited(5, 10), false);
+  assert.equal(isSubscriptionRateLimited(11, 10), true);
+  assert.equal(isSubscriptionRateLimited(1, 1000), true);
+});
+
+
+test('retry delay respects Retry-After but is capped', () => {
+  assert.equal(retryDelayMs(500, 5), 0);
+  assert.equal(retryDelayMs(429, 1), 1000);
+  assert.equal(retryDelayMs(429, 60), 5000);
+});
+
+
+test('analysis flow retries 429 and merges results', async () => {
+  let calls = 0;
+  const metrics = [];
+  const result = await analyzePayloads(
+    [{ imageBase64: 'a' }, { imageBase64: 'b' }],
+    {
+      analyzeReceipt: async () => {
+        calls += 1;
+        if (calls === 1) {
+          const error = new Error('rate limited');
+          error.status = 429;
+          error.retryAfter = 0.001;
+          throw error;
+        }
+        return { purchaseDate: '2026-11-23', items: [{ name: `item${calls}` }] };
+      },
+      onMetric: (kind) => metrics.push(kind),
+    }
+  );
+  assert.equal(calls, 3);
+  assert.equal(result.items.length, 2);
+  assert.equal(result.errors, 0);
+  assert.deepEqual(metrics, ['success', 'success']);
 });

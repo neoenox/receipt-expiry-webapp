@@ -5,7 +5,9 @@ import { createQueuedAnalysis } from './queue.js';
 import { createConsumption, summarizeHistory } from './history.js';
 import { createExpiryHint, buildHintMap, normalizeFoodName } from './learning.js';
 import { filterAndSortItems } from './inventory.js';
-import { buildShoppingSuggestions, buildCalendar } from './features2.js';
+import { buildShoppingSuggestions } from './features2.js';
+import { createCalendarUI } from './calendarUI.js';
+import { analyzePayloads } from './analysisFlow.js';
 import { createSettings, applyStoredTheme } from './settings.js';
 import { createQueueUI } from './queueUI.js';
 
@@ -97,6 +99,8 @@ const state = {
 
   savingKey: false,
 
+  byokApiKey: ''
+
   previewFiles: [],
   previewIndex: 0,
   previewResults: [],
@@ -105,6 +109,8 @@ const state = {
   calendarMonth: new Date().getMonth(),
 };
 
+
+const calendarUI = createCalendarUI({ ui, state });
 
 const queueUI = createQueueUI({ ui, state, showToast, submitAnalysis });
 const settings = createSettings({
@@ -323,18 +329,44 @@ async function submitProcessed(payloads) {
   await submitAnalyses(payloads);
 }
 
+function reportMetric(kind) {
+  void fetch('/api/metrics', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ kind }),
+  }).catch(() => {});
+}
+
+
 async function submitAnalyses(payloads) {
   showLoading(true);
   try {
     const allItems = [];
     let purchaseDate = null;
     for (const payload of payloads) {
+      let result;
       try {
-        const result = await analyzeReceipt({ ...payload, customApiKey: settings.getApiKey() || undefined });
+        result = await analyzeReceipt({ ...payload, customApiKey: settings.getApiKey() || undefined });
+      } catch (error) {
+        const delay = retryDelayMs(error.status, error.retryAfter);
+        if (delay > 0) {
+          await new Promise((resolve) => setTimeout(resolve, delay));
+          try {
+            result = await analyzeReceipt({ ...payload, customApiKey: settings.getApiKey() || undefined });
+          } catch (retryError) {
+            showToast(retryError.message || '解析に失敗しました。');
+          }
+        } else {
+          showToast(error.message || '解析に失敗しました。');
+        }
+      }
+      if (!result) reportMetric('error');
+
+      if (result) {
+        reportMetric('success');
+
         if (!purchaseDate && result.purchaseDate) purchaseDate = result.purchaseDate;
         allItems.push(...result.items);
-      } catch (error) {
-        showToast(error.message || '解析に失敗しました。');
       }
     }
     if (allItems.length) openResultModal({ purchaseDate, items: allItems });
@@ -546,63 +578,6 @@ async function openShopping() {
   openModal(ui.shoppingModal);
 }
 
-function renderCalendar() {
-  const days = buildCalendar(state.items, state.calendarYear, state.calendarMonth);
-  const firstDay = new Date(state.calendarYear, state.calendarMonth, 1).getDay();
-  const dayCount = new Date(state.calendarYear, state.calendarMonth + 1, 0).getDate();
-  const grid = document.createElement('div');
-  grid.className = 'calendar-grid';
-  const header = document.createElement('div');
-  header.className = 'calendar-header';
-  const prev = document.createElement('button');
-  prev.type = 'button';
-  prev.dataset.calendar = 'prev';
-  prev.textContent = '‹';
-  const label = document.createElement('strong');
-  label.textContent = `${state.calendarYear}年 ${state.calendarMonth + 1}月`;
-  const next = document.createElement('button');
-  next.type = 'button';
-  next.dataset.calendar = 'next';
-  next.textContent = '›';
-  header.append(prev, label, next);
-  for (let i = 0; i < firstDay; i += 1) {
-    const empty = document.createElement('div');
-    empty.className = 'calendar-cell is-empty';
-    grid.append(empty);
-  }
-  for (let day = 1; day <= dayCount; day += 1) {
-    const cell = document.createElement('div');
-    cell.className = 'calendar-cell';
-    const number = document.createElement('div');
-    number.className = 'calendar-day';
-    number.textContent = String(day);
-    cell.append(number);
-    for (const item of days.get(day) || []) {
-      const name = document.createElement('div');
-      name.className = 'calendar-item';
-      name.textContent = item.name;
-      cell.append(name);
-    }
-    grid.append(cell);
-  }
-  ui.calendarView.replaceChildren(header, grid);
-}
-
-function toggleView() {
-  const showingCalendar = !ui.calendarView.classList.contains('hidden');
-  if (showingCalendar) {
-    ui.calendarView.classList.add('hidden');
-    ui.list.classList.remove('hidden');
-    ui.emptyState.classList.toggle('hidden', state.items.length > 0);
-    ui.viewToggle.textContent = 'カレンダー';
-  } else {
-    renderCalendar();
-    ui.calendarView.classList.remove('hidden');
-    ui.list.classList.add('hidden');
-    ui.emptyState.classList.add('hidden');
-    ui.viewToggle.textContent = '一覧';
-  }
-}
 
 
 function registerPWAEvents() {
@@ -689,7 +664,7 @@ function wireEvents() {
     }
   });
 
-  ui.viewToggle.addEventListener('click', toggleView);
+  ui.viewToggle.addEventListener('click', calendarUI.toggle);
   ui.calendarView.addEventListener('click', (event) => {
     const direction = event.target.dataset.calendar;
     if (!direction) return;
@@ -697,7 +672,7 @@ function wireEvents() {
     else state.calendarMonth += 1;
     if (state.calendarMonth < 0) { state.calendarMonth = 11; state.calendarYear -= 1; }
     if (state.calendarMonth > 11) { state.calendarMonth = 0; state.calendarYear += 1; }
-    renderCalendar();
+    calendarUI.shiftMonth(direction);
   });
 
   ui.resultItems.addEventListener('click', (event) => {

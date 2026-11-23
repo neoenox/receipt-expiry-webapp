@@ -27,7 +27,11 @@ export async function analyzeReceipt({ imageBase64, mimeType, clientDate, custom
   }
 
   if (!response.ok) {
-    throw new Error(data?.error?.message || `解析に失敗しました（${response.status}）`);
+    const error = new Error(data?.error?.message || `解析に失敗しました（${response.status}）`);
+    error.status = response.status;
+    const retryAfter = Number(response.headers.get('Retry-After'));
+    if (Number.isFinite(retryAfter)) error.retryAfter = retryAfter;
+    throw error;
   }
   return normalizeAnalysis(data);
 }

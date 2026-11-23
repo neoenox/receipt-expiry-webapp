@@ -34,18 +34,20 @@ const responseSchema = {
   required: ['purchaseDate', 'items'],
 };
 
-function json(body, status = 200) {
+function json(body, status = 200, extraHeaders = {}) {
   return new Response(JSON.stringify(body), {
     status,
     headers: {
       'Content-Type': 'application/json; charset=utf-8',
       'Cache-Control': 'no-store',
+
+      ...extraHeaders,
     },
   });
 }
 
 function errorResponse(status, code, message) {
-  return json({ error: { code, message } }, status);
+  return json({ error: { code, message } }, status, status === 429 ? { 'Retry-After': '60' } : {});
 }
 
 function isValidDateString(value) {

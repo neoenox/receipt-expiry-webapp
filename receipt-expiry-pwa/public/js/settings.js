@@ -1,12 +1,33 @@
-import { getAllItems, listConsumption, listExpiryHints, importItems, importConsumption, importExpiryHints, clearAllData } from './db.js';
+import { getAllItems, listConsumption, listExpiryHints, importItems, importConsumption, importExpiryHints, clearAllData, listShoppingItems, addShoppingItems } from './db.js';
 import { serializeBackup, parseBackup } from './backup.js';
 import { buildHintMap } from './learning.js';
 import { daysUntilDate } from './dates.js';
 
-const BYOK_STORAGE_KEY = 'receipt-expiry-gemini-key';
 const NOTIFY_STORAGE_KEY = 'receipt-expiry-notify';
 const THEME_STORAGE_KEY = 'receipt-expiry-theme';
 const NOTIFY_HOUR_KEY = 'receipt-expiry-notify-hour';
+const AD_CONSENT_KEY = 'receipt-expiry-ad-consent';
+
+function storedAdConsent() {
+  try {
+    return localStorage.getItem(AD_CONSENT_KEY);
+  } catch {
+    return null;
+  }
+}
+
+function initConsentMode() {
+  window.dataLayer = window.dataLayer || [];
+  window.gtag = function gtag() { window.dataLayer.push(arguments); };
+  window.gtag('consent', 'default', {
+    ad_storage: 'denied',
+    analytics_storage: 'denied',
+    ad_user_data: 'denied',
+    ad_personalization: 'denied',
+  });
+}
+
+initConsentMode();
 
 function notifyHour() {
   try {
@@ -34,11 +55,7 @@ export function applyStoredTheme() {
 
 export function createSettings({ ui, state, byId, showToast, openModal, todayISO, isValidDate, refreshItems, refreshHistorySummary, refreshQueueStatus }) {
   function getApiKey() {
-    try {
-      return localStorage.getItem(BYOK_STORAGE_KEY) || '';
-    } catch {
-      return '';
-    }
+    return state.byokApiKey || '';
   }
 
   function isNotifyEnabled() {
@@ -60,12 +77,37 @@ export function createSettings({ ui, state, byId, showToast, openModal, todayISO
   }
 
   function refreshApiKeyStatus() {
-    ui.apiKeyInput.value = getApiKey();
+    ui.apiKeyInput.value = '';
     ui.apiKeyStatus.textContent = getApiKey()
-      ? 'この端末にAPIキーが保存されています（解析時に自動で使用されます）。'
+      ? 'このセッションでAPIキーを使用中です（再読み込みで消去されます）。'
       : '未設定の場合は、アプリ側の共通キーで解析します。';
   }
+  function applyAdConsent(value) {
+    try { localStorage.setItem(AD_CONSENT_KEY, value); } catch { /* 保存不可でも反映する */ }
+    const granted = value === 'granted';
+    window.gtag('consent', 'update', {
+      ad_storage: granted ? 'granted' : 'denied',
+      analytics_storage: granted ? 'granted' : 'denied',
+      ad_user_data: granted ? 'granted' : 'denied',
+      ad_personalization: granted ? 'granted' : 'denied',
+    });
+    byId('ad-consent').classList.add('hidden');
+    if (granted) void loadMonetization();
+  }
+
   async function loadMonetization() {
+    const consent = storedAdConsent();
+    if (consent === null) {
+      byId('ad-consent').classList.remove('hidden');
+      byId('ad-status').textContent = '広告の同意を選択してください。';
+      return;
+    }
+    if (consent === 'denied') {
+      byId('ad-status').textContent = '広告は無効に設定されています。';
+      byId('ad-slot').replaceChildren();
+      return;
+    }
+
     try {
       const config = await fetch('/api/config').then((response) => response.json());
       if (config.supportUrl) byId('support-link').href = config.supportUrl;
@@ -157,11 +199,8 @@ export function createSettings({ ui, state, byId, showToast, openModal, todayISO
           : 'APIキーを検証できませんでした。しばらくして再度お試しください。';
         return;
       }
-      try {
-        localStorage.setItem(BYOK_STORAGE_KEY, key);
-        ui.apiKeyStatus.textContent = 'APIキーを検証して保存しました。';
-      } catch {
-        ui.apiKeyStatus.textContent = 'このブラウザではキーを保存できません。';
+      state.byokApiKey = key;
+      ui.apiKeyStatus.textContent = 'APIキーを検証しました。このセッションでのみ使用します。';
       }
     } catch {
       ui.apiKeyStatus.textContent = 'APIキーを検証できませんでした。通信環境を確認してください。';
@@ -172,13 +211,9 @@ export function createSettings({ ui, state, byId, showToast, openModal, todayISO
   }
 
   function clearApiKey() {
-    try {
-      localStorage.removeItem(BYOK_STORAGE_KEY);
-      ui.apiKeyInput.value = '';
-      ui.apiKeyStatus.textContent = 'APIキーを削除しました。共通キーに戻ります。';
-    } catch {
-      ui.apiKeyStatus.textContent = 'このブラウザではキーを削除できません。';
-    }
+    state.byokApiKey = '';
+    ui.apiKeyInput.value = '';
+    ui.apiKeyStatus.textContent = 'APIキーを削除しました。共通キーに戻ります。';
   }
 
   function urlBase64ToUint8Array(base64String) {
@@ -275,7 +310,13 @@ export function createSettings({ ui, state, byId, showToast, openModal, todayISO
       const items = await getAllItems();
       const history = await listConsumption();
       const hints = await listExpiryHints();
-      const blob = new Blob([serializeBackup({ items, history, hints })], { type: 'application/json' });
+      const shopping = await listShoppingItems();
+      const backupSettings = {
+        theme: storedTheme(),
+        notifyHour: notifyHour(),
+        notifyEnabled: isNotifyEnabled(),
+      };
+      const blob = new Blob([serializeBackup({ items, history, hints, shopping, settings: backupSettings })], { type: 'application/json' });
       const url = URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;
@@ -284,7 +325,7 @@ export function createSettings({ ui, state, byId, showToast, openModal, todayISO
       link.click();
       link.remove();
       setTimeout(() => URL.revokeObjectURL(url), 1000);
-      ui.backupStatus.textContent = `在庫${items.length}件・履歴${history.length}件・学習値${hints.length}件を書き出しました。`;
+      ui.backupStatus.textContent = `在庫${items.length}件・履歴${history.length}件・学習値${hints.length}件・買い物${shopping.length}件を書き出しました。`;
       showToast('バックアップを書き出しました。');
     } catch (error) {
       ui.backupStatus.textContent = error.message || '書き出しに失敗しました。';
@@ -306,10 +347,18 @@ export function createSettings({ ui, state, byId, showToast, openModal, todayISO
       await importItems(data.items);
       await importConsumption(data.history);
       await importExpiryHints(data.hints);
+
+      await addShoppingItems(data.shopping);
+      try {
+        localStorage.setItem(THEME_STORAGE_KEY, data.settings.theme);
+        localStorage.setItem(NOTIFY_HOUR_KEY, String(data.settings.notifyHour));
+        localStorage.setItem(NOTIFY_STORAGE_KEY, data.settings.notifyEnabled ? '1' : '0');
+      } catch { /* 設定の保存不可でも復元を続ける */ }
+      applyStoredTheme();
       state.expiryHints = buildHintMap(await listExpiryHints());
       await refreshItems();
       await refreshHistorySummary();
-      ui.backupStatus.textContent = `在庫${data.items.length}件・履歴${data.history.length}件・学習値${data.hints.length}件を読み込みました。`;
+      ui.backupStatus.textContent = `在庫${data.items.length}件・履歴${data.history.length}件・学習値${data.hints.length}件・買い物${data.shopping.length}件を読み込みました。`;
       showToast(`${data.items.length}件の在庫を読み込みました。`);
     } catch (error) {
       ui.backupStatus.textContent = error.message || '読み込みに失敗しました。';
@@ -337,6 +386,9 @@ export function createSettings({ ui, state, byId, showToast, openModal, todayISO
 
 
   function wire() {
+    byId('ad-consent-accept').addEventListener('click', () => applyAdConsent('granted'));
+    byId('ad-consent-decline').addEventListener('click', () => applyAdConsent('denied'));
+
     byId('save-api-key').addEventListener('click', () => void saveApiKey());
     byId('clear-api-key').addEventListener('click', clearApiKey);
     ui.exportBackupBtn.addEventListener('click', () => void exportBackup());

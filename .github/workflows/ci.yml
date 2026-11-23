@@ -27,6 +27,11 @@ jobs:
         working-directory: receipt-expiry-pwa
         run: npm ci
 
+
+      - name: Audit dependencies
+        working-directory: receipt-expiry-pwa
+        run: npm audit --audit-level=high
+
       - name: Check JavaScript syntax
         working-directory: receipt-expiry-pwa
         run: find . -name '*.js' -not -path './node_modules/*' -print0 | xargs -0 -n1 node --check

@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url';
 import { onRequestPost } from '../functions/api/analyze.js';
 import { onRequestPost as onValidateKey } from '../functions/api/validate-key.js';
 import { onRequestGet as onConfig } from '../functions/api/config.js';
+import { onRequestPost as onMetrics } from '../functions/api/metrics.js';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../public');
 const PORT = Number(process.env.PORT || 3000);
@@ -109,6 +110,16 @@ async function handleRequest(req, res) {
     url = new URL(req.url, publicOrigin(req));
   } catch {
     sendText(res, 400, 'Bad Request');
+    return;
+  }
+
+  if (url.pathname === '/api/metrics' && req.method === 'POST') {
+    const chunks = [];
+    for await (const chunk of req) chunks.push(chunk);
+    const request = new Request(url.href, { method: 'POST', headers: req.headers, body: Buffer.concat(chunks) });
+    const response = await onMetrics({ request, env: {} });
+    res.writeHead(response.status, Object.fromEntries(response.headers));
+    res.end(Buffer.from(await response.arrayBuffer()));
     return;
   }
 

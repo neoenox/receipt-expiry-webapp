@@ -21,14 +21,19 @@ test('backup round-trip preserves items, history, and hints', () => {
   const json = serializeBackup({ items: [ITEM], history: [HISTORY], hints: [HINT] });
   const data = JSON.parse(json);
   assert.equal(data.format, 'receipt-expiry-backup');
-  assert.equal(data.version, 2);
+  assert.equal(data.version, 3);
   assert.ok(data.exportedAt);
-  assert.deepEqual(parseBackup(json), { items: [ITEM], history: [HISTORY], hints: [HINT] });
+  const parsed = parseBackup(json);
+  assert.deepEqual(parsed.items, [ITEM]);
+  assert.deepEqual(parsed.history, [HISTORY]);
+  assert.deepEqual(parsed.hints, [HINT]);
+  assert.deepEqual(parsed.shopping, []);
+  assert.deepEqual(parsed.settings, { theme: 'auto', notifyHour: 6, notifyEnabled: false });
 });
 
 test('legacy item-only backups still parse', () => {
   const json = serializeBackup([ITEM]);
-  assert.deepEqual(parseBackup(json), { items: [ITEM], history: [], hints: [] });
+  assert.deepEqual(parseBackup(json).items, [ITEM]);
 });
 
 test('backup strips unknown fields and fills optional fields', () => {

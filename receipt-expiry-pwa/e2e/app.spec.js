@@ -12,6 +12,7 @@ async function resetStorage(page) {
       request.onblocked = resolve;
     });
     localStorage.clear();
+    localStorage.setItem('receipt-expiry-ad-consent', 'granted');
   });
   await page.reload();
   await expect(page.locator('#item-count')).toHaveText('0件');
@@ -59,7 +60,7 @@ test('inventory add, search, sort, consume, and backup round-trip', async ({ pag
   let text = '';
   for await (const chunk of stream) text += chunk.toString();
   const backup = JSON.parse(text);
-  expect(backup.version).toBe(2);
+  expect(backup.version).toBe(3);
   expect(backup.items).toHaveLength(1);
   expect(backup.history).toHaveLength(1);
 
@@ -75,6 +76,8 @@ test('inventory add, search, sort, consume, and backup round-trip', async ({ pag
     buffer: Buffer.from(text),
   });
   await expect(page.locator('#backup-status')).toContainText('在庫1件・履歴1件');
+  expect(backup.shopping).toEqual([]);
+  expect(backup.settings.theme).toBeTruthy();
   await page.keyboard.press('Escape');
   await expect(page.locator('#item-count')).toHaveText('2件');
   await expect(page.locator('.item-name', { hasText: 'テスト牛乳' })).toBeVisible();
@@ -142,8 +145,12 @@ test('BYOK key is validated before it is stored', async ({ page }) => {
   }));
   await page.fill('#api-key-input', 'valid-key');
   await page.click('#save-api-key');
-  await expect(page.locator('#api-key-status')).toContainText('保存しました');
-  expect(await page.evaluate(() => localStorage.getItem('receipt-expiry-gemini-key'))).toBe('valid-key');
+  await expect(page.locator('#api-key-status')).toContainText('このセッションでのみ使用');
+  expect(await page.evaluate(() => localStorage.getItem('receipt-expiry-gemini-key'))).toBeNull();
+  await page.reload();
+  await page.click('#settings-btn');
+  await page.click('[data-settings-tab="data"]');
+  await expect(page.locator('#api-key-status')).toContainText('共通キーで解析します');
 });
 
 test('dark mode changes the page background', async ({ page }) => {
@@ -244,5 +251,16 @@ test('support tab exposes sponsor link and ad status', async ({ page }) => {
   await page.click('#settings-btn');
   await page.click('[data-settings-tab="support"]');
   await expect(page.locator('#support-link')).toHaveAttribute('href', 'https://github.com/sponsors/neoenox');
-  await expect(page.locator('#ad-status')).toContainText('広告は現在無効');
+  await expect(page.locator('#ad-status')).toContainText('広告');
+});
+
+
+test('ad consent is required before ads load', async ({ page }) => {
+  await page.goto('/');
+  await page.evaluate(() => localStorage.removeItem('receipt-expiry-ad-consent'));
+  await page.reload();
+  await expect(page.locator('#ad-consent')).toBeVisible();
+  await page.click('#ad-consent-decline');
+  await expect(page.locator('#ad-consent')).toBeHidden();
+  await expect(page.locator('#ad-status')).toContainText('無効');
 });
