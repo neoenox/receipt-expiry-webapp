@@ -27,7 +27,7 @@ export function createQueueUI({ ui, state, showToast, submitAnalysis }) {
 
   async function refreshQueueStatus() {
     const jobs = await listQueuedAnalyses();
-    ui.queueStatus.textContent = jobs.length ? `未送信の解析: ${jobs.length}件` : '未送信の解析はありません。';
+    ui.queueStatus.textContent = jobs.length ? `まだ読み取っていないレシート: ${jobs.length}件` : '読み取っていないレシートはありません。';
     ui.retryQueueBtn.disabled = jobs.length === 0;
     renderQueueList(jobs);
   }
@@ -42,7 +42,7 @@ export function createQueueUI({ ui, state, showToast, submitAnalysis }) {
     const attempted = nextAttempt(job);
     if (shouldDiscard(attempted)) {
       await deleteQueuedAnalysis(job.id);
-      showToast('解析できなかったレシートを削除しました。');
+      showToast('読み取れなかったレシートを削除しました。');
       return true;
     }
     await updateQueuedAnalysis(attempted);
@@ -64,7 +64,7 @@ export function createQueueUI({ ui, state, showToast, submitAnalysis }) {
       try {
         await submitAnalysis({ imageBase64: job.imageBase64, mimeType: job.mimeType, clientDate: job.clientDate });
         await deleteQueuedAnalysis(id);
-        showToast('解析が完了しました。');
+        showToast('レシートを読み取りました。');
       } catch (error) {
         await handleFailure(job, error);
       }
@@ -77,7 +77,7 @@ export function createQueueUI({ ui, state, showToast, submitAnalysis }) {
   async function deleteQueueJob(id) {
     await deleteQueuedAnalysis(id);
     await refreshQueueStatus();
-    showToast('未送信の解析を削除しました。');
+    showToast('保存したレシートを削除しました。');
   }
 
   async function processQueue() {

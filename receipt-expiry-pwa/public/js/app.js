@@ -299,7 +299,7 @@ async function renderPreview() {
     if (source?.close) source.close();
   }
   ui.previewProgress.textContent = `${state.previewIndex + 1}/${state.previewFiles.length}`;
-  byId('preview-confirm').textContent = state.previewIndex + 1 < state.previewFiles.length ? '次の画像へ' : '解析する';
+  byId('preview-confirm').textContent = state.previewIndex + 1 < state.previewFiles.length ? '次の画像へ' : '読み取る';
 }
 
 function loadPreviewImage(file) {
@@ -361,7 +361,7 @@ async function queueFailedPayloads(failedPayloads, message) {
 
 async function submitProcessed(payloads) {
   if (!navigator.onLine) {
-    await queueFailedPayloads(payloads, `${payloads.length}件をオフラインキューに保存しました。`);
+    await queueFailedPayloads(payloads, `${payloads.length}件を保存しました。接続が戻ったら読み取ります。`);
     return;
   }
   const summary = await submitAnalyses(payloads);
@@ -369,7 +369,7 @@ async function submitProcessed(payloads) {
     const wait = summary.failed.some((entry) => entry.retryAfter)
       ? 'レート制限が解除された後に再試行します。'
       : '接続復帰後に再試行します。';
-    await queueFailedPayloads(summary.failed, `${summary.failed.length}件を解析キューに保存しました。${wait}`);
+    await queueFailedPayloads(summary.failed, `${summary.failed.length}件を後で読み取るリストに保存しました。${wait}`);
   }
 }
 
@@ -414,7 +414,7 @@ async function submitAnalyses(payloads) {
 async function submitAnalysis(payload) {
   const { failed } = await submitAnalyses([payload]);
   if (failed.length) {
-    const error = new Error('解析に失敗しました。');
+    const error = new Error('レシートを読み取れませんでした。');
     error.retryAfter = failed[0].retryAfter || 0;
     throw error;
   }
