@@ -28,6 +28,12 @@ function validDates(value) {
     : [];
 }
 
+function validNotifiedDates(value) {
+  return Array.isArray(value)
+    ? [...new Set(value.filter((date) => DATE_PATTERN.test(date || '')))].sort().slice(-20)
+    : [];
+}
+
 function parseStoredEntry(raw) {
   if (!raw) return {};
   try {
@@ -100,7 +106,7 @@ export async function onRequestPost({ request, env }) {
     const existingRaw = await kv.get(endpoint);
     const previous = parseStoredEntry(existingRaw);
     const today = jstDate(new Date());
-    const notified = new Set(validDates(previous.notifiedExpiryDates));
+    const notified = new Set(validNotifiedDates(previous.notifiedExpiryDates));
     const previousExpiryDates = validDates(previous.expiryDates);
 
     // Legacy records stored notifiedAt but not the expiry date. When the
@@ -122,7 +128,7 @@ export async function onRequestPost({ request, env }) {
       subscription: { endpoint, keys: { p256dh, auth } },
       nextExpiry,
       expiryDates: dates,
-      daysUntil: daysUntilDate(nextExpiry, today) ?? daysUntil,
+      daysUntil: nextExpiry ? daysUntilDate(nextExpiry, today) : null,
       notifyHour,
       notifiedExpiryDates: [...notified].sort().slice(-20),
       ...(previous.notifiedAt ? { notifiedAt: previous.notifiedAt } : {}),
