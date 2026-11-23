@@ -64,7 +64,15 @@ function normalizeShopping(raw, index) {
   if (typeof raw.id !== 'string' || !raw.id) throw new Error(`バックアップの${label}にIDがありません。`);
   if (typeof raw.name !== 'string' || !raw.name.trim()) throw new Error(`バックアップの${label}に食材名がありません。`);
   if (typeof raw.createdAt !== 'number' || !Number.isFinite(raw.createdAt)) throw new Error(`バックアップの${label}の登録日時が不正です。`);
-  return { id: raw.id, name: raw.name.trim().slice(0, 80), createdAt: raw.createdAt };
+  if (raw.storage != null && !VALID_STORAGE.has(raw.storage)) throw new Error(`バックアップの${label}の保存場所が不正です。`);
+  if (raw.expiryDate != null && !isValidDate(raw.expiryDate)) throw new Error(`バックアップの${label}の賞味期限が不正です。`);
+  return {
+    id: raw.id,
+    name: raw.name.trim().slice(0, 80),
+    storage: VALID_STORAGE.has(raw.storage) ? raw.storage : '',
+    expiryDate: isValidDate(raw.expiryDate) ? raw.expiryDate : '',
+    createdAt: raw.createdAt,
+  };
 }
 
 function normalizeSettings(raw) {

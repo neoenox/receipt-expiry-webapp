@@ -1,4 +1,5 @@
 const NAME_KEY = (name) => String(name || '').trim().toLowerCase().replace(/\s+/g, '');
+const VALID_STORAGE = new Set(['fridge', 'freezer', 'pantry']);
 
 /** 消費履歴から、現在の在庫にない食材を頻度順に提案する。 */
 export function buildShoppingSuggestions(history, items, limit = 8) {
@@ -8,9 +9,10 @@ export function buildShoppingSuggestions(history, items, limit = 8) {
     if (entry?.reason !== 'eaten') continue;
     const key = NAME_KEY(entry.name);
     if (!key || inStock.has(key)) continue;
-    const current = counts.get(key) || { name: entry.name, count: 0, lastAt: 0 };
+    const current = counts.get(key) || { name: entry.name, count: 0, lastAt: 0, storage: null };
     current.count += 1;
     current.lastAt = Math.max(current.lastAt, Number(entry.consumedAt) || 0);
+    if (!current.storage && VALID_STORAGE.has(entry.storage)) current.storage = entry.storage;
     counts.set(key, current);
   }
   return Array.from(counts.values())
