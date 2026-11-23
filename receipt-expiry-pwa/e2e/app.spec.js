@@ -12,6 +12,7 @@ async function resetStorage(page) {
       request.onblocked = resolve;
     });
     localStorage.clear();
+    sessionStorage.clear();
     localStorage.setItem('receipt-expiry-ad-consent', 'granted');
   });
   await page.reload();
@@ -173,6 +174,28 @@ test('BYOK key is validated before it is stored', async ({ page }) => {
   await page.click('#settings-btn');
   await page.click('[data-settings-tab="data"]');
   await expect(page.locator('#api-key-status')).toContainText('共通キーで解析します');
+});
+
+test('BYOK key can be kept for the tab when requested', async ({ page }) => {
+  await page.goto('/');
+  await resetStorage(page);
+  await page.route('**/api/validate-key', (route) => route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify({ ok: true }),
+  }));
+  await page.click('#settings-btn');
+  await page.click('[data-settings-tab="data"]');
+  await page.check('#save-api-key-session');
+  await page.fill('#api-key-input', 'kept-key');
+  await page.click('#save-api-key');
+  await expect(page.locator('#api-key-status')).toContainText('このタブを閉じるまで保持');
+
+  await page.reload();
+  await page.click('#settings-btn');
+  await page.click('[data-settings-tab="data"]');
+  await expect(page.locator('#api-key-status')).toContainText('このタブを閉じるまで保持');
+  expect(await page.evaluate(() => localStorage.getItem('receipt-expiry-gemini-key'))).toBeNull();
 });
 
 test('dark mode changes the page background', async ({ page }) => {

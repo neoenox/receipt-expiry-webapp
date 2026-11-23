@@ -13,6 +13,7 @@ const NOTIFY_STORAGE_KEY = 'receipt-expiry-notify';
 const THEME_STORAGE_KEY = 'receipt-expiry-theme';
 const NOTIFY_HOUR_KEY = 'receipt-expiry-notify-hour';
 const AD_CONSENT_KEY = 'receipt-expiry-ad-consent';
+const API_KEY_SESSION_KEY = 'receipt-expiry-api-key';
 
 function storedAdConsent() {
   try {
@@ -60,6 +61,14 @@ export function applyStoredTheme() {
 }
 
 export function createSettings({ ui, state, byId, showToast, openModal, todayISO, isValidDate, refreshItems, refreshHistorySummary, refreshQueueStatus }) {
+  // このタブを閉じるまで保持するオプション。localStorage には書かない。
+  try {
+    const stored = sessionStorage.getItem(API_KEY_SESSION_KEY);
+    if (stored) state.byokApiKey = stored;
+  } catch {
+    // sessionStorage が使えない場合はメモリのみ。
+  }
+
   function getApiKey() {
     return state.byokApiKey || '';
   }
@@ -85,7 +94,13 @@ export function createSettings({ ui, state, byId, showToast, openModal, todayISO
   function refreshApiKeyStatus() {
     ui.apiKeyInput.value = '';
     ui.apiKeyStatus.textContent = getApiKey()
-      ? 'このセッションでAPIキーを使用中です（再読み込みで消去されます）。'
+      ? (() => {
+        let kept = false;
+        try { kept = Boolean(sessionStorage.getItem(API_KEY_SESSION_KEY)); } catch { /* 保存不可 */ }
+        return kept
+          ? 'APIキーを使用中です（このタブを閉じるまで保持します）。'
+          : 'このセッションでAPIキーを使用中です（再読み込みで消去されます）。';
+      })()
       : '未設定の場合は、アプリ側の共通キーで解析します。';
   }
   function applyAdConsent(value) {
@@ -232,7 +247,14 @@ export function createSettings({ ui, state, byId, showToast, openModal, todayISO
         return;
       }
       state.byokApiKey = key;
-      ui.apiKeyStatus.textContent = 'APIキーを検証しました。このセッションでのみ使用します。';
+      if (byId('save-api-key-session').checked) {
+        try { sessionStorage.setItem(API_KEY_SESSION_KEY, key); } catch { /* 保存不可でもメモリでは使う */ }
+      } else {
+        try { sessionStorage.removeItem(API_KEY_SESSION_KEY); } catch { /* 保存不可でも無視 */ }
+      }
+      ui.apiKeyStatus.textContent = byId('save-api-key-session').checked
+        ? 'APIキーを検証しました。このタブを閉じるまで保持します。'
+        : 'APIキーを検証しました。このセッションでのみ使用します。';
     } catch {
       ui.apiKeyStatus.textContent = 'APIキーを検証できませんでした。通信環境を確認してください。';
     } finally {
@@ -244,6 +266,8 @@ export function createSettings({ ui, state, byId, showToast, openModal, todayISO
   function clearApiKey() {
     state.byokApiKey = '';
     ui.apiKeyInput.value = '';
+    try { sessionStorage.removeItem(API_KEY_SESSION_KEY); } catch { /* 保存不可でも無視 */ }
+    byId('save-api-key-session').checked = false;
     ui.apiKeyStatus.textContent = 'APIキーを削除しました。共通キーに戻ります。';
   }
 

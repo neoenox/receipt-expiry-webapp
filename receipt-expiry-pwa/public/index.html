@@ -294,9 +294,12 @@
         </section>
         <section class="settings-section">
           <h3>上級者向け：自分の Gemini API キー</h3>
-          <p class="hint">このセッションでのみ使用し、再読み込みすると消去されます。</p>
+          <p class="hint">通常はメモリのみに保持し、再読み込みすると消去されます。チェックするとこのタブを閉じるまで sessionStorage に保持します（localStorage には保存しません）。</p>
           <label class="field">Gemini API キー
             <input id="api-key-input" type="password" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="AIzaSy...">
+          </label>
+          <label class="field checkbox-field">
+            <input id="save-api-key-session" type="checkbox"> このタブを閉じるまでキーを保持する
           </label>
           <div class="inline-actions">
             <button id="save-api-key" class="btn is-primary" type="button">検証して保存</button>
