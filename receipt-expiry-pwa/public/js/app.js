@@ -55,6 +55,7 @@ const ui = {
   importBackupBtn: byId('import-backup-btn'),
   backupInput: byId('backup-input'),
   backupStatus: byId('backup-status'),
+  backupReminder: byId('backup-reminder'),
 
   backupReplace: byId('backup-replace'),
 
@@ -824,6 +825,7 @@ async function init() {
   wireEvents();
 
   void settings.loadMonetization();
+  settings.refreshBackupReminder();
   registerServiceWorker();
   try {
     await initDB();

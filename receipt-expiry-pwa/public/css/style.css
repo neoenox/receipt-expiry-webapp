@@ -431,6 +431,13 @@ button:focus-visible, input:focus-visible, select:focus-visible {
 }
 .row-select input { width: 18px; height: 18px; accent-color: var(--primary); }
 .result-row.is-unselected { opacity: 0.62; }
+.backup-reminder {
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: var(--warning-soft);
+  color: var(--warning);
+  font-weight: 600;
+}
 .row-notice {
   margin: 8px 0 0;
   padding: 6px 10px;
