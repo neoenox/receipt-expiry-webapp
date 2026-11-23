@@ -5,8 +5,10 @@ import { createQueuedAnalysis } from './queue.js';
 import { createConsumption, summarizeHistory } from './history.js';
 import { createExpiryHint, buildHintMap, normalizeFoodName } from './learning.js';
 import { filterAndSortItems } from './inventory.js';
-import { createSettings } from './settings.js';
+import { createSettings, applyStoredTheme } from './settings.js';
 import { createQueueUI } from './queueUI.js';
+
+applyStoredTheme();
 
 const STORAGE_LABELS = { fridge: '冷蔵', freezer: '冷凍', pantry: '常温' };
 

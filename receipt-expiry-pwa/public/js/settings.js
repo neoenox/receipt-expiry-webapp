@@ -5,6 +5,22 @@ import { daysUntilDate } from './dates.js';
 
 const BYOK_STORAGE_KEY = 'receipt-expiry-gemini-key';
 const NOTIFY_STORAGE_KEY = 'receipt-expiry-notify';
+const THEME_STORAGE_KEY = 'receipt-expiry-theme';
+
+function storedTheme() {
+  try {
+    const value = localStorage.getItem(THEME_STORAGE_KEY);
+    return ['light', 'dark', 'auto'].includes(value) ? value : 'auto';
+  } catch {
+    return 'auto';
+  }
+}
+
+export function applyStoredTheme() {
+  const theme = storedTheme();
+  if (theme === 'auto') document.documentElement.removeAttribute('data-theme');
+  else document.documentElement.dataset.theme = theme;
+}
 
 export function createSettings({ ui, state, byId, showToast, openModal, todayISO, isValidDate, refreshItems, refreshHistorySummary, refreshQueueStatus }) {
   function getApiKey() {
@@ -44,6 +60,8 @@ export function createSettings({ ui, state, byId, showToast, openModal, todayISO
     refreshApiKeyStatus();
     ui.backupStatus.textContent = '';
     ui.backupReplace.checked = false;
+
+    byId('theme-select').value = storedTheme();
     refreshNotifyStatus();
     refreshQueueStatus();
     refreshHistorySummary();
@@ -259,10 +277,16 @@ export function createSettings({ ui, state, byId, showToast, openModal, todayISO
     ui.backupInput.addEventListener('change', handleBackupFileSelected);
     ui.notifyEnableBtn.addEventListener('click', () => void enableNotifications());
     ui.notifyDisableBtn.addEventListener('click', () => void disableNotifications());
+    byId('theme-select').addEventListener('change', (event) => {
+      const theme = event.target.value;
+      try { localStorage.setItem(THEME_STORAGE_KEY, theme); } catch { /* 保存不可でも切替は反映する */ }
+      applyStoredTheme();
+    });
+
     wireSettingsTabs();
   }
 
   return {
-    getApiKey, openSettings, syncPushReminder, refreshNotifyStatus, refreshApiKeyStatus, wire,
+    getApiKey, openSettings, syncPushReminder, refreshNotifyStatus, refreshApiKeyStatus, applyStoredTheme, wire,
   };
 }
