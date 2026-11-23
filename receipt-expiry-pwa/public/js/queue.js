@@ -9,10 +9,11 @@ function newId() {
 }
 
 /** APIキーは端末設定から再取得するため、キューには保存しない。 */
-export function createQueuedAnalysis({ imageBase64, mimeType, clientDate }) {
+export function createQueuedAnalysis({ imageBase64, mimeType, clientDate }, { retryAfter = 0 } = {}) {
   if (typeof imageBase64 !== 'string' || !imageBase64) {
     throw new Error('画像データがありません。');
   }
+  const delayMs = Number.isFinite(retryAfter) && retryAfter > 0 ? retryAfter * 1000 : 0;
   return {
     id: newId(),
     imageBase64,
@@ -20,11 +21,13 @@ export function createQueuedAnalysis({ imageBase64, mimeType, clientDate }) {
     clientDate: DATE_PATTERN.test(clientDate || '') ? clientDate : new Date().toISOString().slice(0, 10),
     createdAt: Date.now(),
     attempts: 0,
+    // 429 の Retry-After を保持し、バケット回復まで再試行しない。
+    nextAttemptAt: Date.now() + delayMs,
   };
 }
 
 export function nextAttempt(job) {
-  return { ...job, attempts: (Number(job.attempts) || 0) + 1 };
+  return { ...job, attempts: (Number(job.attempts) || 0) + 1, nextAttemptAt: 0 };
 }
 
 export function shouldDiscard(job) {

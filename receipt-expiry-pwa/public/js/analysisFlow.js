@@ -3,6 +3,8 @@ import { retryDelayMs } from './features2.js';
 /**
  * 複数画像を順番に解析し、結果を1つにまとめる。DOMには触れない。
  * 各 payload の成否を results に残すため、呼び出し側は失敗分だけキューへ戻せる。
+ * 429 はレート制限バケットが回復するまで待つ必要があるため、ここでは再試行せず
+ * retryAfter を添えて呼び出し側へ返す（キュー側で nextAttemptAt を設定する）。
  */
 export async function analyzePayloads(payloads, { analyzeReceipt, getApiKey, onMetric, onError } = {}) {
   const items = [];
@@ -12,22 +14,29 @@ export async function analyzePayloads(payloads, { analyzeReceipt, getApiKey, onM
 
   for (const payload of payloads || []) {
     let result;
+    let retryAfter = 0;
     const options = { ...payload, customApiKey: getApiKey?.() || undefined };
     try {
       result = await analyzeReceipt(options);
     } catch (error) {
-      const delay = retryDelayMs(error?.status, error?.retryAfter);
-      if (delay > 0) {
-        await new Promise((resolve) => setTimeout(resolve, delay));
-        try {
-          result = await analyzeReceipt(options);
-        } catch (retryError) {
-          errors += 1;
-          onError?.(retryError);
-        }
-      } else {
+      if (error?.status === 429) {
+        retryAfter = Number(error.retryAfter) || 60;
         errors += 1;
         onError?.(error);
+      } else {
+        const delay = retryDelayMs(error?.status, error?.retryAfter);
+        if (delay > 0) {
+          await new Promise((resolve) => setTimeout(resolve, delay));
+          try {
+            result = await analyzeReceipt(options);
+          } catch (retryError) {
+            errors += 1;
+            onError?.(retryError);
+          }
+        } else {
+          errors += 1;
+          onError?.(error);
+        }
       }
     }
 
@@ -38,7 +47,7 @@ export async function analyzePayloads(payloads, { analyzeReceipt, getApiKey, onM
       results.push({ payload, ok: true, result });
     } else {
       onMetric?.('error');
-      results.push({ payload, ok: false });
+      results.push({ payload, ok: false, retryAfter });
     }
   }
 
