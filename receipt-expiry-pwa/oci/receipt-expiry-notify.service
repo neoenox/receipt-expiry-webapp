@@ -1,0 +1,13 @@
+[Unit]
+Description=Receipt Expiry Push Notifier
+After=network.target
+
+[Service]
+Type=oneshot
+User=www-data
+Group=www-data
+WorkingDirectory=/opt/receipt-expiry
+EnvironmentFile=/etc/receipt-expiry.env
+ExecStart=/usr/bin/node /opt/receipt-expiry/oci/notify.js
+NoNewPrivileges=true
+PrivateTmp=true

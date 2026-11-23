@@ -21,6 +21,15 @@ if [ -z "$API_KEY" ]; then
   exit 1
 fi
 
+read -rsp 'VAPID 公開鍵（プッシュ通知用、未設定なら空欄）: ' VAPID_PUBLIC_KEY
+echo
+read -rsp 'VAPID 秘密鍵（プッシュ通知用、未設定なら空欄）: ' VAPID_PRIVATE_KEY
+echo
+if [[ -n "$VAPID_PUBLIC_KEY" && -z "$VAPID_PRIVATE_KEY" ]] || [[ -z "$VAPID_PUBLIC_KEY" && -n "$VAPID_PRIVATE_KEY" ]]; then
+  echo 'VAPID 公開鍵と秘密鍵は両方入力してください。' >&2
+  exit 1
+fi
+
 apt-get update
 apt-get install -y curl ca-certificates nginx certbot python3-certbot-nginx
 
@@ -30,14 +39,30 @@ if ! command -v node >/dev/null 2>&1 || [ "$(node -p 'Number(process.versions.no
 fi
 
 mkdir -p "$APP_DIR"
-cp -r "$REPO_ROOT/public" "$REPO_ROOT/functions" "$REPO_ROOT/oci" "$REPO_ROOT/package.json" "$APP_DIR/"
+cp -r "$REPO_ROOT/public" "$REPO_ROOT/functions" "$REPO_ROOT/oci" "$REPO_ROOT/package.json" "$REPO_ROOT/package-lock.json" "$APP_DIR/"
 
 install -m 600 /dev/null /etc/receipt-expiry.env
-ESCAPED_KEY=${API_KEY//\\/\\\\}
-ESCAPED_KEY=${ESCAPED_KEY//\"/\\\"}
-printf 'GEMINI_API_KEY="%s"\n' "$ESCAPED_KEY" > /etc/receipt-expiry.env
+escape_env() {
+  local value="$1"
+  value=${value//\\/\\\\}
+  value=${value//\"/\\\"}
+  printf '%s' "$value"
+}
+{
+  printf 'GEMINI_API_KEY="%s"\n' "$(escape_env "$API_KEY")"
+  printf 'VAPID_PUBLIC_KEY="%s"\n' "$(escape_env "$VAPID_PUBLIC_KEY")"
+  printf 'VAPID_PRIVATE_KEY="%s"\n' "$(escape_env "$VAPID_PRIVATE_KEY")"
+  printf 'DATA_DIR=/var/lib/receipt-expiry\n'
+} > /etc/receipt-expiry.env
+mkdir -p /var/lib/receipt-expiry
+chown www-data:www-data /var/lib/receipt-expiry
+
+# web-push は本番依存。Playwright は dev なので omit=dev で十分。
+(cd "$APP_DIR" && npm ci --omit=dev)
 
 install -m 644 "$APP_DIR/oci/receipt-expiry.service" /etc/systemd/system/receipt-expiry.service
+install -m 644 "$APP_DIR/oci/receipt-expiry-notify.service" /etc/systemd/system/receipt-expiry-notify.service
+install -m 644 "$APP_DIR/oci/receipt-expiry-notify.timer" /etc/systemd/system/receipt-expiry-notify.timer
 sed "s/YOUR_DOMAIN/${DOMAIN}/g" "$APP_DIR/oci/nginx.conf" > /etc/nginx/sites-available/receipt-expiry
 ln -sfn /etc/nginx/sites-available/receipt-expiry /etc/nginx/sites-enabled/receipt-expiry
 rm -f /etc/nginx/sites-enabled/default
@@ -45,6 +70,11 @@ rm -f /etc/nginx/sites-enabled/default
 nginx -t
 systemctl daemon-reload
 systemctl enable --now receipt-expiry
+if [[ -n "$VAPID_PUBLIC_KEY" ]]; then
+  systemctl enable --now receipt-expiry-notify.timer
+else
+  echo 'VAPID 鍵が未設定のため、プッシュ通知タイマーは有効化しません。' >&2
+fi
 systemctl reload nginx
 
 if command -v ufw >/dev/null 2>&1; then

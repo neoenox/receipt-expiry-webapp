@@ -8,8 +8,10 @@
     "test": "node --test tests/*.js",
     "test:e2e": "playwright test"
   },
-  "devDependencies": {
-    "@playwright/test": "^1.65.1",
+  "dependencies": {
     "web-push": "^4.0.0"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.65.1"
   }
 }

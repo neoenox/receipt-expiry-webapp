@@ -6,11 +6,17 @@ import { onRequestPost } from '../functions/api/analyze.js';
 import { onRequestPost as onValidateKey } from '../functions/api/validate-key.js';
 import { onRequestGet as onConfig } from '../functions/api/config.js';
 import { onRequestPost as onMetrics } from '../functions/api/metrics.js';
+import { onRequestPost as onPushSubscribe } from '../functions/api/push/subscribe.js';
+import { onRequestPost as onPushUnsubscribe } from '../functions/api/push/unsubscribe.js';
+import { onRequestGet as onPushConfig } from '../functions/api/push/config.js';
+import { createKvAdapter } from './kv-adapter.js';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../public');
 const PORT = Number(process.env.PORT || 3000);
 const HOST = process.env.HOST || '127.0.0.1';
 const MAX_BODY_BYTES = 3 * 1024 * 1024;
+const DATA_DIR = process.env.DATA_DIR || '/var/lib/receipt-expiry';
+const KV = createKvAdapter(path.join(DATA_DIR, 'store.json'));
 
 const MIME = {
   '.html': 'text/html; charset=utf-8',
@@ -31,19 +37,20 @@ function publicOrigin(request) {
   return `${proto}://${host}`;
 }
 
-function sendText(res, status, message) {
-  res.writeHead(status, { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'no-store' });
-  res.end(message);
+function apiEnv() {
+  return {
+    GEMINI_API_KEY: process.env.GEMINI_API_KEY || '',
+    VAPID_PUBLIC_KEY: process.env.VAPID_PUBLIC_KEY || '',
+    RATE_LIMIT_KV: KV,
+    PUSH_KV: KV,
+    SUPPORT_URL: process.env.SUPPORT_URL,
+    ADSENSE_CLIENT_ID: process.env.ADSENSE_CLIENT_ID,
+    ADSENSE_SLOT_ID: process.env.ADSENSE_SLOT_ID,
+  };
 }
 
-function cacheControl(filePath) {
-  if (filePath.endsWith('sw.js')) return 'no-cache';
-  const ext = path.extname(filePath);
-  if (['.html', '.js', '.css', '.json'].includes(ext)) return 'no-cache';
-  return 'public, max-age=3600';
-}
-
-async function handleAnalyze(req, res, url) {
+/** 共通の API ハンドラ呼び出し。Request/Response を Node の res へ橋渡しする。 */
+async function runApi(req, res, url, handler) {
   const chunks = [];
   let size = 0;
   for await (const chunk of req) {
@@ -55,16 +62,25 @@ async function handleAnalyze(req, res, url) {
     chunks.push(chunk);
   }
   const request = new Request(url.href, {
-    method: 'POST',
+    method: req.method,
     headers: req.headers,
-    body: Buffer.concat(chunks),
+    body: chunks.length ? Buffer.concat(chunks) : undefined,
   });
-  const response = await onRequestPost({
-    request,
-    env: { GEMINI_API_KEY: process.env.GEMINI_API_KEY || '' },
-  });
+  const response = await handler({ request, env: apiEnv() });
   res.writeHead(response.status, Object.fromEntries(response.headers));
   res.end(Buffer.from(await response.arrayBuffer()));
+}
+
+function sendText(res, status, message) {
+  res.writeHead(status, { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'no-store' });
+  res.end(message);
+}
+
+function cacheControl(filePath) {
+  if (filePath.endsWith('sw.js')) return 'no-cache';
+  const ext = path.extname(filePath);
+  if (['.html', '.js', '.css', '.json'].includes(ext)) return 'no-cache';
+  return 'public, max-age=3600';
 }
 
 async function handleStatic(req, res, url) {
@@ -116,40 +132,24 @@ async function handleRequest(req, res) {
     return;
   }
 
-  if (url.pathname === '/api/metrics' && req.method === 'POST') {
-    const chunks = [];
-    for await (const chunk of req) chunks.push(chunk);
-    const request = new Request(url.href, { method: 'POST', headers: req.headers, body: Buffer.concat(chunks) });
-    const response = await onMetrics({ request, env: {} });
-    res.writeHead(response.status, Object.fromEntries(response.headers));
-    res.end(Buffer.from(await response.arrayBuffer()));
+  const postRoutes = {
+    '/api/analyze': onRequestPost,
+    '/api/validate-key': onValidateKey,
+    '/api/metrics': onMetrics,
+    '/api/push/subscribe': onPushSubscribe,
+    '/api/push/unsubscribe': onPushUnsubscribe,
+  };
+  if (postRoutes[url.pathname] && req.method === 'POST') {
+    await runApi(req, res, url, postRoutes[url.pathname]);
     return;
   }
 
-  if (url.pathname === '/api/config' && req.method === 'GET') {
-    const response = await onConfig({ env: {
-      SUPPORT_URL: process.env.SUPPORT_URL,
-      ADSENSE_CLIENT_ID: process.env.ADSENSE_CLIENT_ID,
-      ADSENSE_SLOT_ID: process.env.ADSENSE_SLOT_ID,
-    } });
-    res.writeHead(response.status, Object.fromEntries(response.headers));
-    res.end(Buffer.from(await response.arrayBuffer()));
-    return;
-  }
-
-  if (url.pathname === '/api/analyze' && req.method === 'POST') {
-    await handleAnalyze(req, res, url);
-    return;
-  }
-  if (url.pathname === '/api/validate-key' && req.method === 'POST') {
-    const chunks = [];
-    for await (const chunk of req) chunks.push(chunk);
-    const request = new Request(url.href, {
-      method: 'POST',
-      headers: req.headers,
-      body: Buffer.concat(chunks),
-    });
-    const response = await onValidateKey({ request });
+  const getRoutes = {
+    '/api/config': onConfig,
+    '/api/push/config': onPushConfig,
+  };
+  if (getRoutes[url.pathname] && req.method === 'GET') {
+    const response = await getRoutes[url.pathname]({ env: apiEnv() });
     res.writeHead(response.status, Object.fromEntries(response.headers));
     res.end(Buffer.from(await response.arrayBuffer()));
     return;
