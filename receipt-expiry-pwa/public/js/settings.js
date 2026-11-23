@@ -324,6 +324,7 @@ export function createSettings({ ui, state, byId, showToast, openModal, todayISO
         body: JSON.stringify({
           subscription: subscription.toJSON(),
           nextExpiry: dates[0] || null,
+          expiryDates: dates.slice(0, 20),
           daysUntil: dates[0] ? daysUntilDate(dates[0]) : null,
 
           notifyHour: notifyHour(),
