@@ -18,7 +18,11 @@ function createKv(store = new Map()) {
     async get(key) { return store.get(key) ?? null; },
     async put(key, value) { store.set(key, value); },
     async delete(key) { store.delete(key); },
-    async list() { return { keys: [], list_complete: true }; },
+    async list() {
+      const names = [...store.keys()].filter((key) => !key.startsWith('subrate:')
+        && key !== 'subcount:total' && !key.startsWith('metrics:'));
+      return { keys: names.map((name) => ({ name })), list_complete: true };
+    },
   };
 }
 
