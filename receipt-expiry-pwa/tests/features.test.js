@@ -172,6 +172,40 @@ test('notification hour is evaluated in JST and catches up missed runs', () => {
 });
 
 
+test('reminder advances to the next expiry after notifying', async (t) => {
+  const { sendReminders } = await import('../functions/shared/reminder.js');
+  const store = new Map();
+  const kv = {
+    async list() { return { keys: [{ name: 'sub1' }], list_complete: true }; },
+    async get(key) { return store.get(key) ?? null; },
+    async put(key, value) { store.set(key, value); },
+    async delete(key) { store.delete(key); },
+  };
+  const now = new Date('2026-11-23T21:00:00Z'); // JST 06:00
+  store.set('sub1', JSON.stringify({
+    subscription: { endpoint: 'https://example.test/push' },
+    nextExpiry: '2026-11-24',
+    expiryDates: ['2026-11-24', '2026-11-30', '2026-12-05'],
+    notifyHour: 6,
+    daysUntil: 0,
+  }));
+  const sent = [];
+
+  const count = await sendReminders({
+    kv,
+    sendNotification: async (sub, payload) => sent.push(JSON.parse(payload)),
+    vapid: { publicKey: 'pub', privateKey: 'priv' },
+    now,
+  });
+
+  assert.equal(count, 1);
+  assert.match(sent[0].body, /本日が賞味期限/);
+  const updated = JSON.parse(store.get('sub1'));
+  assert.equal(updated.nextExpiry, '2026-11-30');
+  assert.equal(updated.daysUntil, 6);
+  assert.ok(updated.notifiedAt);
+});
+
 test('subscription writes are rate limited', () => {
   assert.equal(isSubscriptionRateLimited(5, 10), false);
   assert.equal(isSubscriptionRateLimited(11, 10), true);

@@ -198,6 +198,7 @@ test('notification opt-in succeeds with a subscribed push manager', async ({ pag
   });
   await page.goto('/');
   await resetStorage(page);
+  await addItem(page, '牛乳', '2026-12-20');
 
   // 実 API（OCI サーバー）の push ルートを使い、購読が保存されることを確認する。
   const subscribeRequests = [];
@@ -213,6 +214,7 @@ test('notification opt-in succeeds with a subscribed push manager', async ({ pag
   await expect(page.locator('#notify-status')).toContainText('通知を有効にしています');
   await expect.poll(() => subscribeRequests.length).toBeGreaterThan(0);
   expect(subscribeRequests[0].subscription.endpoint).toBe('https://example.test/e2e');
+  expect(subscribeRequests[0].expiryDates).toContain('2026-12-20');
 });
 
 

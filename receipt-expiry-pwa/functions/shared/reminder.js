@@ -1,6 +1,7 @@
 import { jstDate, shouldSendAtHour } from '../../public/js/features2.js';
 
 export const REMINDER_TITLE = 'レシート賞味期限';
+const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 const REMINDER_BODY = 'まもなく賞味期限の食材があります。アプリを開いて確認してください。';
 const REMINDER_SUFFIX = 'アプリを開いて確認してください。';
 
@@ -44,7 +45,18 @@ export async function sendReminders({ kv, sendNotification, vapid, now = new Dat
           entry.subscription,
           JSON.stringify({ title: REMINDER_TITLE, body: buildReminderBody(entry.daysUntil), url: '/' })
         );
-        await kv.put(name, JSON.stringify({ ...entry, nextExpiry: null, notifiedAt: Date.now() }));
+        // 次の期限へ進める。アプリを開かなくても残りの期限を通知できる。
+        const upcoming = (Array.isArray(entry.expiryDates) ? entry.expiryDates : [])
+          .filter((date) => DATE_PATTERN.test(date || '') && date > today)
+          .sort();
+        const next = upcoming[0] || null;
+        const nextDaysUntil = next ? Math.round((Date.parse(next) - Date.parse(today)) / 86_400_000) : null;
+        await kv.put(name, JSON.stringify({
+          ...entry,
+          nextExpiry: next,
+          daysUntil: nextDaysUntil,
+          notifiedAt: Date.now(),
+        }));
         sent += 1;
       } catch (error) {
         if (error.statusCode === 404 || error.statusCode === 410) {
