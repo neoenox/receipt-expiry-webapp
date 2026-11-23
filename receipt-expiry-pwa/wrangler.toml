@@ -19,7 +19,7 @@ script_name = "receipt-expiry-ratelimiter"
 [vars]
 VAPID_PUBLIC_KEY = "BBH70Vd1epc-FBv8gqa8ZrwgLMcXqJMq4eTHzloq7NW_9oBkqriptpJ100zUK_7oDv9Pb6_qLE64gxPtIJObuFk"
 SUPPORT_URL = "https://github.com/sponsors/neoenox"
-ADSENSE_CLIENT_ID = ""
+ADSENSE_CLIENT_ID = "ca-pub-2249200824903407"
 ADSENSE_SLOT_ID = ""
 
 [env.production]
@@ -36,7 +36,7 @@ id = "144d3da77b74483f92a3397b0bf5647e"
 VAPID_PUBLIC_KEY = "BBH70Vd1epc-FBv8gqa8ZrwgLMcXqJMq4eTHzloq7NW_9oBkqriptpJ100zUK_7oDv9Pb6_qLE64gxPtIJObuFk"
 
 SUPPORT_URL = "https://github.com/sponsors/neoenox"
-ADSENSE_CLIENT_ID = ""
+ADSENSE_CLIENT_ID = "ca-pub-2249200824903407"
 ADSENSE_SLOT_ID = ""
 
 [[env.production.durable_objects.bindings]]

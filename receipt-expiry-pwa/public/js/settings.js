@@ -70,25 +70,32 @@ export function createSettings({ ui, state, byId, showToast, openModal, todayISO
       const config = await fetch('/api/config').then((response) => response.json());
       if (config.supportUrl) byId('support-link').href = config.supportUrl;
       const slot = byId('ad-slot');
-      if (config.adsenseClient && config.adsenseSlot) {
-        byId('ad-status').textContent = '広告を表示しています。';
+      const client = config.adsenseClient;
+      if (client) {
+        byId('ad-status').textContent = config.adsenseSlot
+          ? '広告を表示しています。'
+          : '自動広告を有効にしました（サイト審査後に配信開始）。';
         if (!document.querySelector('script[data-adsense]')) {
           const script = document.createElement('script');
           script.async = true;
           script.dataset.adsense = '1';
           script.crossOrigin = 'anonymous';
-          script.src = `https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=${encodeURIComponent(config.adsenseClient)}`;
+          script.src = `https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=${encodeURIComponent(client)}`;
           document.head.append(script);
         }
-        if (!slot.firstChild) {
-          const ad = document.createElement('ins');
-          ad.className = 'adsbygoogle';
-          ad.style.display = 'block';
-          ad.dataset.adClient = config.adsenseClient;
-          ad.dataset.adSlot = config.adsenseSlot;
-          ad.dataset.adFormat = 'auto';
-          slot.append(ad);
-          (window.adsbygoogle = window.adsbygoogle || []).push({});
+        if (config.adsenseSlot) {
+          if (!slot.firstChild) {
+            const ad = document.createElement('ins');
+            ad.className = 'adsbygoogle';
+            ad.style.display = 'block';
+            ad.dataset.adClient = client;
+            ad.dataset.adSlot = config.adsenseSlot;
+            ad.dataset.adFormat = 'auto';
+            slot.append(ad);
+            (window.adsbygoogle = window.adsbygoogle || []).push({});
+          }
+        } else {
+          slot.replaceChildren();
         }
       } else {
         byId('ad-status').textContent = '広告は現在無効です（スポンサー募集中）。';
@@ -353,6 +360,7 @@ export function createSettings({ ui, state, byId, showToast, openModal, todayISO
   }
 
   return {
-    getApiKey, openSettings, syncPushReminder, refreshNotifyStatus, refreshApiKeyStatus, applyStoredTheme, wire,
+
+    getApiKey, openSettings, syncPushReminder, refreshNotifyStatus, refreshApiKeyStatus, applyStoredTheme, loadMonetization, wire,
   };
 }
