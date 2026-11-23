@@ -99,7 +99,8 @@ const state = {
 
   savingKey: false,
 
-  byokApiKey: ''
+  byokApiKey: '',
+  processingPreview: false,
 
   previewFiles: [],
   previewIndex: 0,
@@ -296,8 +297,10 @@ function cropOptions() {
 }
 
 async function confirmPreview() {
+  if (state.processingPreview) return;
   const file = state.previewFiles[state.previewIndex];
   if (!file) return;
+  state.processingPreview = true;
   showLoading(true);
   try {
     const { base64, mimeType } = await processReceiptImage(file, {
@@ -315,18 +318,28 @@ async function confirmPreview() {
   } catch (error) {
     showToast(error.message || '画像を処理できませんでした。');
   } finally {
+    state.processingPreview = false;
     showLoading(false);
   }
 }
 
+/** 解析に失敗した payload をキューへ戻し、件数を返す。 */
+async function queueFailedPayloads(failedPayloads, message) {
+  for (const payload of failedPayloads) await enqueueAnalysis(createQueuedAnalysis(payload));
+  if (failedPayloads.length) await queueUI.refreshQueueStatus();
+  if (message) showToast(message);
+  return failedPayloads.length;
+}
+
 async function submitProcessed(payloads) {
   if (!navigator.onLine) {
-    for (const payload of payloads) await enqueueAnalysis(createQueuedAnalysis(payload));
-    await queueUI.refreshQueueStatus();
-    showToast(`${payloads.length}件をオフラインキューに保存しました。`);
+    await queueFailedPayloads(payloads, `${payloads.length}件をオフラインキューに保存しました。`);
     return;
   }
-  await submitAnalyses(payloads);
+  const { failed } = await submitAnalyses(payloads);
+  if (failed) {
+    await queueFailedPayloads(failed, `${failed}件を解析キューに保存しました。接続復帰後に再試行します。`);
+  }
 }
 
 function reportMetric(kind) {
@@ -337,47 +350,32 @@ function reportMetric(kind) {
   }).catch(() => {});
 }
 
-
+/**
+ * 解析結果と失敗 payload を返す。失敗分は呼び出し側がキューへ戻す。
+ * 500 系など再試行しないエラーでも payload を失わない。
+ */
 async function submitAnalyses(payloads) {
   showLoading(true);
   try {
-    const allItems = [];
-    let purchaseDate = null;
-    for (const payload of payloads) {
-      let result;
-      try {
-        result = await analyzeReceipt({ ...payload, customApiKey: settings.getApiKey() || undefined });
-      } catch (error) {
-        const delay = retryDelayMs(error.status, error.retryAfter);
-        if (delay > 0) {
-          await new Promise((resolve) => setTimeout(resolve, delay));
-          try {
-            result = await analyzeReceipt({ ...payload, customApiKey: settings.getApiKey() || undefined });
-          } catch (retryError) {
-            showToast(retryError.message || '解析に失敗しました。');
-          }
-        } else {
-          showToast(error.message || '解析に失敗しました。');
-        }
-      }
-      if (!result) reportMetric('error');
-
-      if (result) {
-        reportMetric('success');
-
-        if (!purchaseDate && result.purchaseDate) purchaseDate = result.purchaseDate;
-        allItems.push(...result.items);
-      }
-    }
-    if (allItems.length) openResultModal({ purchaseDate, items: allItems });
-    else showToast('食材が見つかりませんでした。');
+    const summary = await analyzePayloads(payloads, {
+      analyzeReceipt,
+      getApiKey: settings.getApiKey,
+      onMetric: reportMetric,
+      onError: (error) => showToast(error.message || '解析に失敗しました。'),
+    });
+    const failed = summary.results.filter((entry) => !entry.ok).map((entry) => entry.payload);
+    if (summary.items.length) openResultModal({ purchaseDate: summary.purchaseDate, items: summary.items });
+    else if (!failed.length) showToast('食材が見つかりませんでした。');
+    return { ...summary, failed };
   } finally {
     showLoading(false);
   }
 }
 
+/** 単一画像の解析。失敗時は throw し、キュー側の試行回数管理を動かす。 */
 async function submitAnalysis(payload) {
-  await submitAnalyses([payload]);
+  const { failed } = await submitAnalyses([payload]);
+  if (failed.length) throw new Error('解析に失敗しました。');
 }
 
 

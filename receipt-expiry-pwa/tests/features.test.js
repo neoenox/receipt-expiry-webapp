@@ -152,4 +152,26 @@ test('analysis flow retries 429 and merges results', async () => {
   assert.equal(result.items.length, 2);
   assert.equal(result.errors, 0);
   assert.deepEqual(metrics, ['success', 'success']);
+  assert.deepEqual(result.results.map((entry) => entry.ok), [true, true]);
+});
+
+test('analysis flow reports the exact payload that failed so it can be requeued', async () => {
+  const errors = [];
+  const result = await analyzePayloads(
+    [{ imageBase64: 'ok' }, { imageBase64: 'bad' }],
+    {
+      analyzeReceipt: async ({ imageBase64 }) => {
+        if (imageBase64 === 'bad') throw new Error('解析できません');
+        return { purchaseDate: '2026-11-23', items: [{ name: '牛乳' }] };
+      },
+      onError: (error) => errors.push(error.message),
+    }
+  );
+
+  assert.equal(result.errors, 1);
+  assert.equal(result.items.length, 1);
+  assert.deepEqual(errors, ['解析できません']);
+  assert.deepEqual(result.results.map((entry) => entry.ok), [true, false]);
+  assert.deepEqual(result.results[1].payload, { imageBase64: 'bad' });
+  assert.deepEqual(result.failed ?? result.results.filter((entry) => !entry.ok).map((entry) => entry.payload), [{ imageBase64: 'bad' }]);
 });
