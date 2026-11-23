@@ -35,7 +35,7 @@ export async function onRequestPost({ request, env }) {
 
   try {
     if (await isRateLimited(request, env)) {
-      return json({ error: { code: 'RATE_LIMIT_EXCEEDED' } }, 429);
+      return errorResponse(429, 'RATE_LIMIT_EXCEEDED', 'キー検証の上限に達しました。1分後にお試しください。');
     }
   } catch {
     return json({ error: { code: 'RATE_LIMIT_UNAVAILABLE' } }, 503);

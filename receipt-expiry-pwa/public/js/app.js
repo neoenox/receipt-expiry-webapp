@@ -353,27 +353,34 @@ async function submitProcessed(payloads) {
   }
 }
 
-function reportMetric(kind) {
+function reportMetric(kind, count = 1) {
   void fetch('/api/metrics', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ kind }),
+    body: JSON.stringify({ kind, count }),
   }).catch(() => {});
 }
 
 /**
  * 解析結果と失敗 payload を返す。失敗分は呼び出し側がキューへ戻す。
- * 500 系など再試行しないエラーでも payload を失わない。
+ * トーストとメトリクスは payload ごとではなく、ここで集約して1回だけ出す。
  */
 async function submitAnalyses(payloads) {
   showLoading(true);
   try {
+    let successes = 0;
+    let failures = 0;
     const summary = await analyzePayloads(payloads, {
       analyzeReceipt,
       getApiKey: settings.getApiKey,
-      onMetric: reportMetric,
-      onError: (error) => showToast(error.message || '解析に失敗しました。'),
+      onMetric: (kind) => {
+        if (kind === 'success') successes += 1;
+        else failures += 1;
+      },
     });
+    if (successes) reportMetric('success', successes);
+    if (failures) reportMetric('error', failures);
+
     const failed = summary.results.filter((entry) => !entry.ok);
     if (summary.items.length) openResultModal({ purchaseDate: summary.purchaseDate, items: summary.items });
     else if (!failed.length) showToast('食材が見つかりませんでした。');

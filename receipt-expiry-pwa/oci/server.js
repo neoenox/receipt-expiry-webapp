@@ -16,7 +16,8 @@ import { sendReminders } from '../functions/shared/reminder.js';
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../public');
 const PORT = Number(process.env.PORT || 3000);
 const HOST = process.env.HOST || '127.0.0.1';
-const MAX_BODY_BYTES = 3 * 1024 * 1024;
+const MAX_BODY_BYTES = 16 * 1024;
+const MAX_ANALYZE_BODY_BYTES = 3 * 1024 * 1024;
 const DATA_DIR = process.env.DATA_DIR || '/var/lib/receipt-expiry';
 const KV = createKvAdapter(path.join(DATA_DIR, 'store.json'));
 
@@ -54,12 +55,12 @@ function apiEnv() {
 }
 
 /** 共通の API ハンドラ呼び出し。Request/Response を Node の res へ橋渡しする。 */
-async function runApi(req, res, url, handler) {
+async function runApi(req, res, url, handler, maxBytes = MAX_BODY_BYTES) {
   const chunks = [];
   let size = 0;
   for await (const chunk of req) {
     size += chunk.length;
-    if (size > MAX_BODY_BYTES) {
+    if (size > maxBytes) {
       sendText(res, 413, 'Payload Too Large');
       return;
     }
@@ -144,7 +145,8 @@ async function handleRequest(req, res) {
     '/api/push/unsubscribe': onPushUnsubscribe,
   };
   if (postRoutes[url.pathname] && req.method === 'POST') {
-    await runApi(req, res, url, postRoutes[url.pathname]);
+    const maxBytes = url.pathname === '/api/analyze' ? MAX_ANALYZE_BODY_BYTES : MAX_BODY_BYTES;
+    await runApi(req, res, url, postRoutes[url.pathname], maxBytes);
     return;
   }
 
