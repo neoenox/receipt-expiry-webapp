@@ -78,8 +78,8 @@ export function createSettings({ ui, state, byId, showToast, openModal, todayISO
       return;
     }
     ui.notifyStatus.textContent = isNotifyEnabled()
-      ? `通知を有効にしています（${Notification.permission}）。`
-      : '通知は無効です。';
+      ? `通知を有効にしています（日本時間 ${String(notifyHour()).padStart(2, '0')}:00 / ${Notification.permission}）。`
+      : `通知は無効です（有効化すると日本時間 ${String(notifyHour()).padStart(2, '0')}:00 に通知します）。`;
   }
 
   function refreshApiKeyStatus() {
@@ -443,7 +443,8 @@ export function createSettings({ ui, state, byId, showToast, openModal, todayISO
     byId('notify-hour').addEventListener('change', (event) => {
       try { localStorage.setItem(NOTIFY_HOUR_KEY, event.target.value); } catch { /* 保存不可でも反映する */ }
       void syncPushReminder();
-      showToast(`通知時刻を${event.target.value}:00にしました。`);
+      refreshNotifyStatus();
+      showToast(`通知時刻を日本時間 ${String(event.target.value).padStart(2, '0')}:00 にしました。`);
     });
 
     byId('theme-select').addEventListener('change', (event) => {
