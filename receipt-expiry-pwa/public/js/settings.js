@@ -1,5 +1,11 @@
 import { getAllItems, listConsumption, listExpiryHints, importItems, importConsumption, importExpiryHints, clearAllData, listShoppingItems, addShoppingItems } from './db.js';
-import { serializeBackup, parseBackup } from './backup.js';
+import {
+  serializeBackup,
+  parseBackup,
+  LAST_BACKUP_KEY,
+  isBackupStale,
+  formatLastBackupDate,
+} from './backup.js';
 import { buildHintMap } from './learning.js';
 import { daysUntilDate } from './dates.js';
 
@@ -155,10 +161,31 @@ export function createSettings({ ui, state, byId, showToast, openModal, todayISO
 
 
 
+  function storedLastBackup() {
+    try {
+      return localStorage.getItem(LAST_BACKUP_KEY);
+    } catch {
+      return null;
+    }
+  }
+
+  function refreshBackupReminder() {
+    const last = storedLastBackup();
+    const date = formatLastBackupDate(last);
+    const stale = isBackupStale(last);
+    ui.backupReminder.classList.toggle('hidden', !stale);
+    if (stale) {
+      ui.backupReminder.textContent = date
+        ? `最終バックアップは ${date} です。7日以上経過したので書き出しをおすすめします。`
+        : 'バックアップの記録がありません。初めて書き出すことをおすすめします。';
+    }
+  }
+
   function openSettings() {
     refreshApiKeyStatus();
     ui.backupStatus.textContent = '';
     ui.backupReplace.checked = false;
+    refreshBackupReminder();
 
     byId('theme-select').value = storedTheme();
 
@@ -329,6 +356,12 @@ export function createSettings({ ui, state, byId, showToast, openModal, todayISO
       link.click();
       link.remove();
       setTimeout(() => URL.revokeObjectURL(url), 1000);
+      try {
+        localStorage.setItem(LAST_BACKUP_KEY, new Date().toISOString());
+      } catch {
+        // 保存不可でも書き出し自体は成功として扱う。
+      }
+      refreshBackupReminder();
       ui.backupStatus.textContent = `在庫${items.length}件・履歴${history.length}件・学習値${hints.length}件・買い物${shopping.length}件を書き出しました。`;
       showToast('バックアップを書き出しました。');
     } catch (error) {
@@ -417,6 +450,7 @@ export function createSettings({ ui, state, byId, showToast, openModal, todayISO
 
   return {
 
-    getApiKey, openSettings, syncPushReminder, refreshNotifyStatus, refreshApiKeyStatus, applyStoredTheme, loadMonetization, wire,
+    getApiKey, openSettings, syncPushReminder, refreshNotifyStatus, refreshApiKeyStatus, refreshBackupReminder,
+    applyStoredTheme, loadMonetization, wire,
   };
 }

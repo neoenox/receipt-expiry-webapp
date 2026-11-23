@@ -95,6 +95,32 @@ export function serializeBackup(data) {
   }, null, 2);
 }
 
+export const LAST_BACKUP_KEY = 'receipt-expiry-last-backup';
+export const BACKUP_REMINDER_DAYS = 7;
+
+/** ISO 日時文字列として妥当ならそのまま返す。不正なら null。 */
+export function normalizeLastBackup(value) {
+  if (typeof value !== 'string' || !value) return null;
+  const time = Date.parse(value);
+  return Number.isFinite(time) ? new Date(time).toISOString() : null;
+}
+
+/**
+ * 最終バックアップが古いかどうか。未記録・不正な値は安全側（古い）として扱う。
+ */
+export function isBackupStale(lastBackup, now = new Date(), days = BACKUP_REMINDER_DAYS) {
+  const normalized = normalizeLastBackup(lastBackup);
+  if (!normalized) return true;
+  const elapsed = now.getTime() - Date.parse(normalized);
+  return elapsed >= days * 86_400_000;
+}
+
+/** 表示用の日付（YYYY-MM-DD）。不正なら null。 */
+export function formatLastBackupDate(lastBackup) {
+  const normalized = normalizeLastBackup(lastBackup);
+  return normalized ? normalized.slice(0, 10) : null;
+}
+
 /** 形式・必須項目を検証し、キー重複は後勝ちでマージしたデータを返す。 */
 export function parseBackup(text) {
   let data;

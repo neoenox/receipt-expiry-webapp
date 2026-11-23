@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { serializeBackup, parseBackup } from '../public/js/backup.js';
+import { serializeBackup, parseBackup, normalizeLastBackup, isBackupStale, formatLastBackupDate } from '../public/js/backup.js';
 
 const ITEM = {
   id: '550e8400-e29b-41d4-a716-446655440000',
@@ -54,6 +54,18 @@ test('duplicate IDs keep the last value', () => {
   const { items } = parseBackup(json);
   assert.equal(items.length, 1);
   assert.equal(items[0].name, '新しい名前');
+});
+
+test('backup staleness is based on the recorded export time', () => {
+  const now = new Date('2026-11-23T00:00:00Z');
+  assert.equal(normalizeLastBackup('2026-11-20T12:00:00Z'), '2026-11-20T12:00:00.000Z');
+  assert.equal(normalizeLastBackup('not-a-date'), null);
+
+  assert.equal(isBackupStale('2026-11-22T00:00:00Z', now), false);
+  assert.equal(isBackupStale('2026-11-16T00:00:00Z', now), true);
+  assert.equal(isBackupStale(null, now), true);
+  assert.equal(isBackupStale('bad', now), true);
+  assert.equal(formatLastBackupDate('2026-11-20T12:00:00Z'), '2026-11-20');
 });
 
 test('malformed files and invalid history are rejected', () => {

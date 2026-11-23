@@ -55,6 +55,7 @@ test('inventory add, search, sort, consume, and backup round-trip', async ({ pag
   await page.click('[data-settings-tab="data"]');
 
   await page.click('#export-backup-btn');
+  await expect(page.locator('#backup-reminder')).toBeHidden();
   const download = await downloadPromise;
   const stream = await download.createReadStream();
   let text = '';
@@ -83,6 +84,22 @@ test('inventory add, search, sort, consume, and backup round-trip', async ({ pag
   await expect(page.locator('.item-name', { hasText: 'テスト牛乳' })).toBeVisible();
 });
 
+
+test('stale backup reminder appears and clears after exporting', async ({ page }) => {
+  await page.goto('/');
+  await resetStorage(page);
+  await page.evaluate(() => localStorage.setItem('receipt-expiry-last-backup', '2026-01-01T00:00:00Z'));
+  await page.reload();
+
+  await page.click('#settings-btn');
+  await page.click('[data-settings-tab="data"]');
+  await expect(page.locator('#backup-reminder')).toContainText('2026-01-01');
+
+  const downloadPromise = page.waitForEvent('download');
+  await page.click('#export-backup-btn');
+  await downloadPromise;
+  await expect(page.locator('#backup-reminder')).toBeHidden();
+});
 
 test('offline analysis is queued and retried after reconnection', async ({ page }) => {
   await page.goto('/');
