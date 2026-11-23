@@ -236,3 +236,13 @@ test('calendar view groups items by expiry date', async ({ page }) => {
   await page.click('#view-toggle');
   await expect(page.locator('#item-list')).toBeVisible();
 });
+
+
+test('support tab exposes sponsor link and ad status', async ({ page }) => {
+  await page.goto('/');
+  await resetStorage(page);
+  await page.click('#settings-btn');
+  await page.click('[data-settings-tab="support"]');
+  await expect(page.locator('#support-link')).toHaveAttribute('href', 'https://github.com/sponsors/neoenox');
+  await expect(page.locator('#ad-status')).toContainText('広告は現在無効');
+});

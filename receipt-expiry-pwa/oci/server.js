@@ -4,6 +4,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { onRequestPost } from '../functions/api/analyze.js';
 import { onRequestPost as onValidateKey } from '../functions/api/validate-key.js';
+import { onRequestGet as onConfig } from '../functions/api/config.js';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../public');
 const PORT = Number(process.env.PORT || 3000);
@@ -108,6 +109,17 @@ async function handleRequest(req, res) {
     url = new URL(req.url, publicOrigin(req));
   } catch {
     sendText(res, 400, 'Bad Request');
+    return;
+  }
+
+  if (url.pathname === '/api/config' && req.method === 'GET') {
+    const response = await onConfig({ env: {
+      SUPPORT_URL: process.env.SUPPORT_URL,
+      ADSENSE_CLIENT_ID: process.env.ADSENSE_CLIENT_ID,
+      ADSENSE_SLOT_ID: process.env.ADSENSE_SLOT_ID,
+    } });
+    res.writeHead(response.status, Object.fromEntries(response.headers));
+    res.end(Buffer.from(await response.arrayBuffer()));
     return;
   }
 
