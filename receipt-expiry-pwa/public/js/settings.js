@@ -363,7 +363,7 @@ export function createSettings({ ui, state, byId, showToast, openModal, todayISO
         // 保存不可でも書き出し自体は成功として扱う。
       }
       refreshBackupReminder();
-      ui.backupStatus.textContent = `在庫${items.length}件・履歴${history.length}件・学習値${hints.length}件・買い物${shopping.length}件を書き出しました。`;
+      ui.backupStatus.textContent = `在庫${items.length}件・履歴${history.length}件・期限の記憶${hints.length}件・買い物${shopping.length}件を書き出しました。`;
       showToast('バックアップを書き出しました。');
     } catch (error) {
       ui.backupStatus.textContent = error.message || '書き出しに失敗しました。';
@@ -378,10 +378,10 @@ export function createSettings({ ui, state, byId, showToast, openModal, todayISO
     if (!file) return;
     try {
       const data = parseBackup(await file.text());
-      const incoming = `在庫${data.items.length}件・履歴${data.history.length}件・学習値${data.hints.length}件・買い物${data.shopping.length}件`;
+      const incoming = `在庫${data.items.length}件・履歴${data.history.length}件・期限の記憶${data.hints.length}件・買い物${data.shopping.length}件`;
       if (ui.backupReplace.checked) {
         const currentItems = await getAllItems();
-        const message = `既存の在庫${currentItems.length}件・履歴・学習値・買い物・未送信キューをすべて削除し、
+        const message = `既存の在庫${currentItems.length}件・履歴・期限の記憶・買い物・未送信の解析をすべて削除し、
 バックアップの内容（${incoming}）で置き換えます。よろしいですか？`;
         if (!window.confirm(message)) return;
         await clearAllData();
@@ -402,7 +402,7 @@ export function createSettings({ ui, state, byId, showToast, openModal, todayISO
       state.expiryHints = buildHintMap(await listExpiryHints());
       await refreshItems();
       await refreshHistorySummary();
-      ui.backupStatus.textContent = `在庫${data.items.length}件・履歴${data.history.length}件・学習値${data.hints.length}件・買い物${data.shopping.length}件を読み込みました。`;
+      ui.backupStatus.textContent = `在庫${data.items.length}件・履歴${data.history.length}件・期限の記憶${data.hints.length}件・買い物${data.shopping.length}件を読み込みました。`;
       showToast(`${data.items.length}件の在庫を読み込みました。`);
     } catch (error) {
       ui.backupStatus.textContent = error.message || '読み込みに失敗しました。';
