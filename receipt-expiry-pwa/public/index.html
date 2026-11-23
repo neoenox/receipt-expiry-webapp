@@ -204,7 +204,7 @@
 
       <div class="settings-tabs" role="tablist" aria-label="設定の切り替え">
         <button class="settings-tab is-active" type="button" role="tab" aria-selected="true" data-settings-tab="basic">基本</button>
-        <button class="settings-tab" type="button" role="tab" aria-selected="false" data-settings-tab="notify">通知・キュー</button>
+        <button class="settings-tab" type="button" role="tab" aria-selected="false" data-settings-tab="notify">通知</button>
         <button class="settings-tab" type="button" role="tab" aria-selected="false" data-settings-tab="data">データ・AI</button>
 
         <button class="settings-tab" type="button" role="tab" aria-selected="false" data-settings-tab="support">サポート</button>
@@ -252,7 +252,7 @@
           <p id="notify-status" class="hint" aria-live="polite"></p>
         </section>
         <section class="settings-section">
-          <h3>オフライン解析キュー</h3>
+          <h3>オフラインで撮影したレシート</h3>
           <p class="hint">オフラインで撮影したレシートは接続復帰後に自動解析します。APIキーは保存しません。</p>
           <div class="inline-actions">
             <button id="retry-queue-btn" class="btn is-primary" type="button">今すぐ再試行</button>
@@ -265,7 +265,7 @@
       <div class="settings-panel" data-settings-panel="data" hidden>
         <section class="settings-section">
           <h3>在庫のバックアップ</h3>
-          <p class="hint">在庫・履歴・学習値を JSON で書き出し / 読み込みできます。</p>
+          <p class="hint">在庫・履歴・過去の賞味期限の記憶を JSON で書き出し / 読み込みできます。</p>
           <p id="backup-reminder" class="hint backup-reminder hidden" aria-live="polite"></p>
           <div class="inline-actions">
             <button id="export-backup-btn" class="btn is-primary" type="button">書き出す</button>
@@ -293,7 +293,7 @@
           </details>
         </section>
         <section class="settings-section">
-          <h3>自分の Gemini API キー（BYOK）</h3>
+          <h3>上級者向け：自分の Gemini API キー</h3>
           <p class="hint">このセッションでのみ使用し、再読み込みすると消去されます。</p>
           <label class="field">Gemini API キー
             <input id="api-key-input" type="password" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="AIzaSy...">
