@@ -19,6 +19,31 @@ test('queued analysis never stores an API key', () => {
   assert.ok(job.id);
 });
 
+test('rate-limited payloads carry Retry-After so the queue can wait', async () => {
+  const result = await analyzePayloads(
+    [{ imageBase64: 'rate-limited' }],
+    {
+      analyzeReceipt: async () => {
+        const error = new Error('rate limited');
+        error.status = 429;
+        error.retryAfter = 60;
+        throw error;
+      },
+    }
+  );
+  assert.equal(result.errors, 1);
+  assert.equal(result.results[0].ok, false);
+  assert.equal(result.results[0].retryAfter, 60);
+});
+
+test('queued jobs wait until nextAttemptAt before a retry', () => {
+  const job = createQueuedAnalysis({ imageBase64: 'aGVsbG8=' }, { retryAfter: 60 });
+  assert.ok(job.nextAttemptAt > Date.now() + 59_000);
+  const attempted = nextAttempt(job);
+  assert.equal(attempted.nextAttemptAt, 0);
+  assert.equal(attempted.attempts, 1);
+});
+
 test('queue retries are bounded', () => {
   let job = createQueuedAnalysis({ imageBase64: 'aGVsbG8=' });
   for (let i = 0; i < MAX_QUEUE_ATTEMPTS; i += 1) job = nextAttempt(job);
@@ -135,30 +160,28 @@ test('retry delay respects Retry-After but is capped', () => {
 });
 
 
-test('analysis flow retries 429 and merges results', async () => {
-  let calls = 0;
+test('analysis flow does not burn attempts on 429 and still merges other results', async () => {
   const metrics = [];
   const result = await analyzePayloads(
     [{ imageBase64: 'a' }, { imageBase64: 'b' }],
     {
-      analyzeReceipt: async () => {
-        calls += 1;
-        if (calls === 1) {
+      analyzeReceipt: async ({ imageBase64 }) => {
+        if (imageBase64 === 'a') {
           const error = new Error('rate limited');
           error.status = 429;
-          error.retryAfter = 0.001;
+          error.retryAfter = 60;
           throw error;
         }
-        return { purchaseDate: '2026-11-23', items: [{ name: `item${calls}` }] };
+        return { purchaseDate: '2026-11-23', items: [{ name: 'item-b' }] };
       },
       onMetric: (kind) => metrics.push(kind),
     }
   );
-  assert.equal(calls, 3);
-  assert.equal(result.items.length, 2);
-  assert.equal(result.errors, 0);
-  assert.deepEqual(metrics, ['success', 'success']);
-  assert.deepEqual(result.results.map((entry) => entry.ok), [true, true]);
+  assert.equal(result.items.length, 1);
+  assert.equal(result.errors, 1);
+  assert.deepEqual(result.results.map((entry) => entry.ok), [false, true]);
+  assert.equal(result.results[0].retryAfter, 60);
+  assert.deepEqual(metrics, ['error', 'success']);
 });
 
 test('analysis flow reports the exact payload that failed so it can be requeued', async () => {

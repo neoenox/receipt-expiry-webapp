@@ -40,6 +40,19 @@ test('rejects requests from a different origin', async () => {
   assert.equal((await response.json()).error.code, 'FORBIDDEN');
 });
 
+test('uses PUBLIC_ORIGIN override instead of the request URL origin', async () => {
+  const request = new Request('https://spoofed.example/api/analyze', {
+    method: 'POST',
+    headers: { Origin: ORIGIN, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ imageBase64: VALID_IMAGE }),
+  });
+  const allowed = await onRequestPost({ request, env: { PUBLIC_ORIGIN: ORIGIN } });
+  assert.notEqual(allowed.status, 403);
+
+  const denied = await onRequestPost({ request, env: { PUBLIC_ORIGIN: 'https://expected.example' } });
+  assert.equal(denied.status, 403);
+});
+
 test('rejects requests without an Origin or with a non-JSON content type', async () => {
   const noOrigin = new Request(`${ORIGIN}/api/analyze`, {
     method: 'POST',

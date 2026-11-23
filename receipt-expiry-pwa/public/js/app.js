@@ -330,7 +330,10 @@ async function confirmPreview() {
 
 /** 解析に失敗した payload をキューへ戻し、件数を返す。 */
 async function queueFailedPayloads(failedPayloads, message) {
-  for (const payload of failedPayloads) await enqueueAnalysis(createQueuedAnalysis(payload));
+  for (const entry of failedPayloads) {
+    const payload = entry.payload || entry;
+    await enqueueAnalysis(createQueuedAnalysis(payload, { retryAfter: entry.retryAfter || 0 }));
+  }
   if (failedPayloads.length) await queueUI.refreshQueueStatus();
   if (message) showToast(message);
   return failedPayloads.length;
@@ -341,34 +344,44 @@ async function submitProcessed(payloads) {
     await queueFailedPayloads(payloads, `${payloads.length}件をオフラインキューに保存しました。`);
     return;
   }
-  const { failed } = await submitAnalyses(payloads);
-  if (failed) {
-    await queueFailedPayloads(failed, `${failed}件を解析キューに保存しました。接続復帰後に再試行します。`);
+  const summary = await submitAnalyses(payloads);
+  if (summary.failed.length) {
+    const wait = summary.failed.some((entry) => entry.retryAfter)
+      ? 'レート制限が解除された後に再試行します。'
+      : '接続復帰後に再試行します。';
+    await queueFailedPayloads(summary.failed, `${summary.failed.length}件を解析キューに保存しました。${wait}`);
   }
 }
 
-function reportMetric(kind) {
+function reportMetric(kind, count = 1) {
   void fetch('/api/metrics', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ kind }),
+    body: JSON.stringify({ kind, count }),
   }).catch(() => {});
 }
 
 /**
  * 解析結果と失敗 payload を返す。失敗分は呼び出し側がキューへ戻す。
- * 500 系など再試行しないエラーでも payload を失わない。
+ * トーストとメトリクスは payload ごとではなく、ここで集約して1回だけ出す。
  */
 async function submitAnalyses(payloads) {
   showLoading(true);
   try {
+    let successes = 0;
+    let failures = 0;
     const summary = await analyzePayloads(payloads, {
       analyzeReceipt,
       getApiKey: settings.getApiKey,
-      onMetric: reportMetric,
-      onError: (error) => showToast(error.message || '解析に失敗しました。'),
+      onMetric: (kind) => {
+        if (kind === 'success') successes += 1;
+        else failures += 1;
+      },
     });
-    const failed = summary.results.filter((entry) => !entry.ok).map((entry) => entry.payload);
+    if (successes) reportMetric('success', successes);
+    if (failures) reportMetric('error', failures);
+
+    const failed = summary.results.filter((entry) => !entry.ok);
     if (summary.items.length) openResultModal({ purchaseDate: summary.purchaseDate, items: summary.items });
     else if (!failed.length) showToast('食材が見つかりませんでした。');
     return { ...summary, failed };
@@ -377,10 +390,14 @@ async function submitAnalyses(payloads) {
   }
 }
 
-/** 単一画像の解析。失敗時は throw し、キュー側の試行回数管理を動かす。 */
+/** 単一画像の解析。失敗時は retryAfter を添えて throw し、キュー側の待機を制御する。 */
 async function submitAnalysis(payload) {
   const { failed } = await submitAnalyses([payload]);
-  if (failed.length) throw new Error('解析に失敗しました。');
+  if (failed.length) {
+    const error = new Error('解析に失敗しました。');
+    error.retryAfter = failed[0].retryAfter || 0;
+    throw error;
+  }
 }
 
 

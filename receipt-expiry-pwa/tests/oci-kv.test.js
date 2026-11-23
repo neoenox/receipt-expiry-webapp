@@ -22,6 +22,36 @@ test('KV adapter persists values across instances and supports prefix listing', 
   assert.equal(listed.list_complete, true);
 });
 
+test('TTL survives a restart and is cleared by a later put without TTL', async (t) => {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'receipt-kv-'));
+  t.after(() => fs.rm(dir, { recursive: true, force: true }));
+  const file = path.join(dir, 'store.json');
+
+  const first = createKvAdapter(file);
+  await first.put('short', 'expired', { expirationTtl: -1 });
+  await first.put('keep', 'alive', { expirationTtl: 3600 });
+
+  // 新しいインスタンス = プロセス再起動を模す。
+  const second = createKvAdapter(file);
+  assert.equal(await second.get('short'), null);
+  assert.equal(await second.get('keep'), 'alive');
+
+  await second.put('keep', 'no-ttl');
+  const third = createKvAdapter(file);
+  assert.equal(await third.get('keep'), 'no-ttl');
+});
+
+test('list excludes expired entries', async (t) => {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'receipt-kv-'));
+  t.after(() => fs.rm(dir, { recursive: true, force: true }));
+  const kv = createKvAdapter(path.join(dir, 'store.json'));
+
+  await kv.put('expired', 'x', { expirationTtl: -1 });
+  await kv.put('alive', 'y', { expirationTtl: 3600 });
+  const listed = await kv.list();
+  assert.deepEqual(listed.keys.map((entry) => entry.name), ['alive']);
+});
+
 test('KV adapter serializes concurrent writes', async (t) => {
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'receipt-kv-'));
   t.after(() => fs.rm(dir, { recursive: true, force: true }));

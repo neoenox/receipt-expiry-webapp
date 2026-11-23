@@ -32,6 +32,24 @@ export function createQueueUI({ ui, state, showToast, submitAnalysis }) {
     renderQueueList(jobs);
   }
 
+  /** レート制限(429)では試行回数を消費せず、次回試行時刻だけを遅らせる。 */
+  async function handleFailure(job, error) {
+    const retryAfter = Number(error?.retryAfter) || 0;
+    if (retryAfter > 0) {
+      await updateQueuedAnalysis({ ...job, nextAttemptAt: Date.now() + retryAfter * 1000 });
+      return false;
+    }
+    const attempted = nextAttempt(job);
+    if (shouldDiscard(attempted)) {
+      await deleteQueuedAnalysis(job.id);
+      showToast('解析できなかったレシートを削除しました。');
+      return true;
+    }
+    await updateQueuedAnalysis(attempted);
+    showToast(`再試行できませんでした: ${error.message || '不明なエラー'}`);
+    return true;
+  }
+
   async function retryQueueJob(id) {
     if (state.processingQueue) return;
     state.processingQueue = true;
@@ -39,19 +57,16 @@ export function createQueueUI({ ui, state, showToast, submitAnalysis }) {
       const jobs = await listQueuedAnalyses();
       const job = jobs.find((entry) => entry.id === id);
       if (!job) return;
+      if (job.nextAttemptAt && Date.now() < job.nextAttemptAt) {
+        showToast('レート制限が解除されるまでお待ちください。');
+        return;
+      }
       try {
         await submitAnalysis({ imageBase64: job.imageBase64, mimeType: job.mimeType, clientDate: job.clientDate });
         await deleteQueuedAnalysis(id);
         showToast('解析が完了しました。');
       } catch (error) {
-        const attempted = nextAttempt(job);
-        if (shouldDiscard(attempted)) {
-          await deleteQueuedAnalysis(id);
-          showToast('解析できなかったため削除しました。');
-        } else {
-          await updateQueuedAnalysis(attempted);
-          showToast(`再試行できませんでした: ${error.message || '不明なエラー'}`);
-        }
+        await handleFailure(job, error);
       }
       await refreshQueueStatus();
     } finally {
@@ -71,19 +86,13 @@ export function createQueueUI({ ui, state, showToast, submitAnalysis }) {
     try {
       const jobs = await listQueuedAnalyses();
       for (const job of jobs) {
+        if (job.nextAttemptAt && Date.now() < job.nextAttemptAt) continue;
         try {
           await submitAnalysis({ imageBase64: job.imageBase64, mimeType: job.mimeType, clientDate: job.clientDate });
           await deleteQueuedAnalysis(job.id);
         } catch (error) {
-          const attempted = nextAttempt(job);
-          if (shouldDiscard(attempted)) {
-            await deleteQueuedAnalysis(job.id);
-            showToast('解析できなかったレシートを削除しました。');
-          } else {
-            await updateQueuedAnalysis(attempted);
-            showToast(`再試行できませんでした: ${error.message || '不明なエラー'}`);
-          }
-          break;
+          const discarded = await handleFailure(job, error);
+          if (discarded) break;
         }
       }
       await refreshQueueStatus();

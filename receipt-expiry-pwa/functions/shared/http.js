@@ -19,11 +19,13 @@ export function errorResponse(status, code, message) {
  * 同一オリジンからの JSON POST だけを許可する。
  * Origin 欠落は拒否し、単純リクエスト（text/plain 等）も受け付けない。
  */
-export function requireSameOriginJson(request) {
+export function requireSameOriginJson(request, allowedOriginOverride) {
   const origin = request.headers.get('Origin');
   let allowedOrigin;
   try {
-    allowedOrigin = new URL(request.url).origin;
+    allowedOrigin = allowedOriginOverride
+      ? new URL(allowedOriginOverride).origin
+      : new URL(request.url).origin;
   } catch {
     return errorResponse(400, 'INVALID_REQUEST', 'リクエストが正しくありません。');
   }

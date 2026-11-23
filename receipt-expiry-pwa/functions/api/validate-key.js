@@ -30,12 +30,12 @@ async function isRateLimited(request, env) {
 }
 
 export async function onRequestPost({ request, env }) {
-  const rejected = requireSameOriginJson(request);
+  const rejected = requireSameOriginJson(request, env?.PUBLIC_ORIGIN);
   if (rejected) return rejected;
 
   try {
     if (await isRateLimited(request, env)) {
-      return json({ error: { code: 'RATE_LIMIT_EXCEEDED' } }, 429);
+      return errorResponse(429, 'RATE_LIMIT_EXCEEDED', 'キー検証の上限に達しました。1分後にお試しください。');
     }
   } catch {
     return json({ error: { code: 'RATE_LIMIT_UNAVAILABLE' } }, 503);

@@ -1,5 +1,5 @@
 const CACHE_PREFIX = 'receipt-expiry-';
-const CACHE_NAME = `${CACHE_PREFIX}v10`;
+const CACHE_NAME = `${CACHE_PREFIX}v11`;
 const STATIC_ASSETS = [
   '/',
   '/index.html',
@@ -44,7 +44,12 @@ async function putInCache(request, response) {
 async function networkFirst(request) {
   try {
     const response = await fetch(request);
-    await putInCache(request, response);
+    // キャッシュ失敗（QuotaExceeded 等）で network response を落とさない。
+    try {
+      await putInCache(request, response);
+    } catch {
+      // キャッシュ不可でもネットワークの結果は返す。
+    }
     return response;
   } catch {
     const cached = await caches.match(request);
