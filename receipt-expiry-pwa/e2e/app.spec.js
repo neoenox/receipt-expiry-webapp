@@ -87,7 +87,10 @@ test('offline analysis is queued and retried after reconnection', async ({ page 
 
   await page.context().setOffline(true);
   await page.setInputFiles('#gallery-input', ICON_PATH);
-  await expect(page.locator('#toast')).toContainText('オフラインです');
+
+  await expect(page.locator('#preview-modal')).toBeVisible();
+  await page.click('#preview-confirm');
+  await expect(page.locator('#toast')).toContainText('オフラインキューに保存しました');
 
   await page.click('#settings-btn');
 
@@ -182,4 +185,54 @@ test('notification opt-in succeeds with a subscribed push manager', async ({ pag
   await page.click('[data-settings-tab="notify"]');
   await page.click('#notify-enable-btn');
   await expect(page.locator('#notify-status')).toContainText('通知を有効にしています');
+});
+
+
+test('multiple receipts are previewed and merged into one result', async ({ page }) => {
+  await page.goto('/');
+  await resetStorage(page);
+  await page.route('**/api/analyze', (route) => route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify({
+      purchaseDate: '2026-11-23',
+      items: [{ name: '牛乳', storage: 'fridge', expiryDate: '2026-12-01', quantity: '' }],
+    }),
+  }));
+
+  await page.setInputFiles('#gallery-input', [ICON_PATH, ICON_PATH]);
+  await expect(page.locator('#preview-progress')).toHaveText('1/2');
+  await page.click('#preview-confirm');
+  await expect(page.locator('#preview-progress')).toHaveText('2/2');
+  await page.click('#preview-confirm');
+  await expect(page.locator('#result-items .result-row')).toHaveCount(2);
+});
+
+test('shopping list suggestions come from consumed items', async ({ page }) => {
+  await page.goto('/');
+  await resetStorage(page);
+  await addItem(page, '牛乳', '2026-12-20');
+  await page.click('.item-card-main');
+  await page.click('#edit-delete');
+  await page.click('#consume-eaten');
+  await expect(page.locator('#item-count')).toHaveText('0件');
+
+  await page.click('#shopping-btn');
+  await expect(page.locator('#shopping-suggestions')).toContainText('牛乳');
+  await page.click('#shopping-suggestions button');
+  await expect(page.locator('#shopping-items')).toContainText('牛乳');
+  await page.click('#shopping-items button[data-add]');
+  await page.click('#shopping-close');
+  await expect(page.locator('.item-name')).toHaveText('牛乳');
+});
+
+test('calendar view groups items by expiry date', async ({ page }) => {
+  await page.goto('/');
+  await resetStorage(page);
+  await addItem(page, '牛乳', `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}-05`);
+  await page.click('#view-toggle');
+  await expect(page.locator('#calendar-view')).toBeVisible();
+  await expect(page.locator('#calendar-view')).toContainText('牛乳');
+  await page.click('#view-toggle');
+  await expect(page.locator('#item-list')).toBeVisible();
 });

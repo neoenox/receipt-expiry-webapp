@@ -1,0 +1,55 @@
+const NAME_KEY = (name) => String(name || '').trim().toLowerCase().replace(/\s+/g, '');
+
+/** 消費履歴から、現在の在庫にない食材を頻度順に提案する。 */
+export function buildShoppingSuggestions(history, items, limit = 8) {
+  const inStock = new Set((items || []).map((item) => NAME_KEY(item.name)));
+  const counts = new Map();
+  for (const entry of history || []) {
+    if (entry?.reason !== 'eaten') continue;
+    const key = NAME_KEY(entry.name);
+    if (!key || inStock.has(key)) continue;
+    const current = counts.get(key) || { name: entry.name, count: 0, lastAt: 0 };
+    current.count += 1;
+    current.lastAt = Math.max(current.lastAt, Number(entry.consumedAt) || 0);
+    counts.set(key, current);
+  }
+  return Array.from(counts.values())
+    .sort((a, b) => b.count - a.count || b.lastAt - a.lastAt)
+    .slice(0, limit);
+}
+
+/** 月カレンダーの日付 -> アイテム一覧を作成する。 */
+export function buildCalendar(items, year, month) {
+  const days = new Map();
+  for (const item of items || []) {
+    const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(item?.expiryDate || '');
+    if (!match) continue;
+    if (Number(match[1]) !== year || Number(match[2]) !== month + 1) continue;
+    const day = Number(match[3]);
+    if (!days.has(day)) days.set(day, []);
+    days.get(day).push(item);
+  }
+  return days;
+}
+
+/** トリミング範囲（0〜1）をピクセル矩形へ変換する。 */
+export function cropRect(width, height, crop, rotation = 0) {
+  const source = rotation % 180 === 0 ? [width, height] : [height, width];
+  const left = Math.max(0, Math.min(0.9, Number(crop?.left) || 0)) * source[0];
+  const right = Math.max(0, Math.min(0.9, Number(crop?.right) || 0)) * source[0];
+  const top = Math.max(0, Math.min(0.9, Number(crop?.top) || 0)) * source[1];
+  const bottom = Math.max(0, Math.min(0.9, Number(crop?.bottom) || 0)) * source[1];
+  return {
+    x: left,
+    y: top,
+    width: Math.max(1, source[0] - left - right),
+    height: Math.max(1, source[1] - top - bottom),
+  };
+}
+
+/** 通知時刻（JST）が一致するか。未設定ならデフォルト6時。 */
+export function shouldSendAtHour(entry, now = new Date()) {
+  const hour = Number.isFinite(entry?.notifyHour) ? Math.max(0, Math.min(23, entry.notifyHour)) : 6;
+  const jstHour = (now.getUTCHours() + 9) % 24;
+  return jstHour === hour;
+}

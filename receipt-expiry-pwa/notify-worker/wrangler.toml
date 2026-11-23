@@ -12,4 +12,4 @@ VAPID_PUBLIC_KEY = "BBH70Vd1epc-FBv8gqa8ZrwgLMcXqJMq4eTHzloq7NW_9oBkqriptpJ100zU
 VAPID_SUBJECT = "mailto:neoenox@gmail.com"
 
 [triggers]
-crons = ["0 21 * * *"]
+crons = ["0 * * * *"]

@@ -598,3 +598,58 @@ button:focus-visible, input:focus-visible, select:focus-visible {
   --toast-text: #e2e8f0;
   --shadow: 0 6px 22px rgba(0, 0, 0, .35);
 }
+
+
+.heading-actions { display: flex; gap: 10px; align-items: center; }
+.text-btn {
+  border: 0;
+  background: none;
+  color: var(--primary-dark);
+  font-size: 12px;
+  font-weight: 600;
+  padding: 4px;
+}
+.preview-image {
+  display: block;
+  width: 100%;
+  max-height: 45vh;
+  object-fit: contain;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: #000;
+}
+.crop-controls {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px 12px;
+  margin-top: 12px;
+  font-size: 12px;
+  color: var(--muted);
+}
+.crop-controls input { width: 100%; }
+.calendar-view { margin-top: 12px; }
+.calendar-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; }
+.calendar-cell {
+  min-height: 58px;
+  padding: 4px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  font-size: 11px;
+}
+.calendar-cell.is-empty { background: transparent; border-color: transparent; }
+.calendar-day { font-weight: 700; color: var(--muted); }
+.calendar-item { margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--safe); }
+.calendar-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+.shopping-list { display: flex; flex-direction: column; gap: 8px; margin-bottom: 12px; }
+.shopping-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface-alt);
+  font-size: 13px;
+}
+.shopping-row span { flex: 1; }

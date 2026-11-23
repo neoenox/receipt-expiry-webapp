@@ -4,6 +4,7 @@ import { createQueuedAnalysis, nextAttempt, shouldDiscard, MAX_QUEUE_ATTEMPTS } 
 import { createConsumption, summarizeHistory } from '../public/js/history.js';
 import { normalizeFoodName, createExpiryHint, buildHintMap } from '../public/js/learning.js';
 import { filterAndSortItems } from '../public/js/inventory.js';
+import { buildShoppingSuggestions, buildCalendar, cropRect, shouldSendAtHour } from '../public/js/features2.js';
 import { dataUrlMime, base64FromDataUrl, nextQuality } from '../public/js/imageOptions.js';
 import { daysUntilDate } from '../public/js/dates.js';
 import { buildReminderBody } from '../notify-worker/index.js';
@@ -73,4 +74,41 @@ test('reminder dates and messages are computed locally', () => {
   assert.match(buildReminderBody(0), /本日が賞味期限/);
   assert.match(buildReminderBody(1), /明日が賞味期限/);
   assert.match(buildReminderBody(4), /あと4日/);
+});
+
+
+test('shopping suggestions exclude current stock and sort by frequency', () => {
+  const history = [
+    { name: '牛乳', reason: 'eaten', consumedAt: 1 },
+    { name: '牛乳', reason: 'eaten', consumedAt: 2 },
+    { name: 'パン', reason: 'discarded', consumedAt: 3 },
+    { name: '卵', reason: 'eaten', consumedAt: 4 },
+  ];
+  const suggestions = buildShoppingSuggestions(history, [{ name: '卵' }]);
+  assert.deepEqual(suggestions.map((item) => item.name), ['牛乳']);
+  assert.equal(suggestions[0].count, 2);
+});
+
+test('calendar groups items by expiry day within the requested month', () => {
+  const items = [
+    { name: 'A', expiryDate: '2026-11-05' },
+    { name: 'B', expiryDate: '2026-11-05' },
+    { name: 'C', expiryDate: '2026-12-01' },
+  ];
+  const days = buildCalendar(items, 2026, 10);
+  assert.equal(days.get(5).length, 2);
+  assert.equal(days.has(1), false);
+});
+
+test('crop rect respects rotation and bounds', () => {
+  assert.deepEqual(cropRect(100, 200, { left: 0.1, right: 0.2, top: 0.25, bottom: 0.05 }), {
+    x: 10, y: 50, width: 70, height: 140,
+  });
+  assert.equal(cropRect(100, 200, {}, 90).width >= 199, true);
+});
+
+test('notification hour is evaluated in JST', () => {
+  const now = new Date('2026-11-23T21:00:00Z');
+  assert.equal(shouldSendAtHour({ notifyHour: 6 }, now), true);
+  assert.equal(shouldSendAtHour({ notifyHour: 7 }, now), false);
 });

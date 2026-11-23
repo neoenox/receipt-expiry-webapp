@@ -1,4 +1,5 @@
 import { setVapidDetails, sendNotification } from 'web-push';
+import { shouldSendAtHour } from '../public/js/features2.js';
 
 const REMINDER_TITLE = 'レシート賞味期限';
 const REMINDER_BODY = 'まもなく賞味期限の食材があります。アプリを開いて確認してください。';
@@ -34,6 +35,7 @@ async function sendReminders(env) {
       continue;
     }
     if (!entry?.nextExpiry || entry.nextExpiry > today) continue;
+    if (!shouldSendAtHour(entry, new Date())) continue;
 
     try {
       await sendNotification(

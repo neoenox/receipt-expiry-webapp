@@ -1,4 +1,5 @@
 import { QUALITY_STEPS, MAX_BASE64_CHARS, dataUrlMime, base64FromDataUrl, nextQuality } from './imageOptions.js';
+import { cropRect } from './features2.js';
 
 const MAX_SIZE = 1024;
 const MAX_FILE_BYTES = 20 * 1024 * 1024;
@@ -7,7 +8,7 @@ const MAX_FILE_BYTES = 20 * 1024 * 1024;
  * レシート画像を長辺1024pxのJPEGへリサイズし、プレフィックスなしのBase64を返す。
  * createImageBitmap がEXIF回転を補正するため、縦撮影画像も正しい向きで描画される。
  */
-export async function processReceiptImage(file) {
+export async function processReceiptImage(file, options = {}) {
   if (!file || typeof file.type !== 'string' || !file.type.startsWith('image/')) {
     throw new Error('画像ファイルを選択してください。');
   }
@@ -32,10 +33,26 @@ export async function processReceiptImage(file) {
     if (!originalWidth || !originalHeight) {
       throw new Error('画像のサイズを取得できませんでした。');
     }
+    const rotate = Number(options.rotate) || 0;
+    const swap = rotate % 180 !== 0;
+    const rotatedWidth = swap ? originalHeight : originalWidth;
+    const rotatedHeight = swap ? originalWidth : originalHeight;
 
-    const scale = Math.min(1, MAX_SIZE / Math.max(originalWidth, originalHeight));
-    const targetWidth = Math.max(1, Math.round(originalWidth * scale));
-    const targetHeight = Math.max(1, Math.round(originalHeight * scale));
+    const intermediate = document.createElement('canvas');
+    intermediate.width = rotatedWidth;
+    intermediate.height = rotatedHeight;
+    const ictx = intermediate.getContext('2d');
+    if (!ictx) throw new Error('画像を処理できませんでした。');
+    ictx.fillStyle = '#ffffff';
+    ictx.fillRect(0, 0, rotatedWidth, rotatedHeight);
+    ictx.translate(rotatedWidth / 2, rotatedHeight / 2);
+    ictx.rotate((rotate * Math.PI) / 180);
+    ictx.drawImage(source, -originalWidth / 2, -originalHeight / 2);
+
+    const rect = cropRect(rotatedWidth, rotatedHeight, options.crop || {}, 0);
+    const scale = Math.min(1, MAX_SIZE / Math.max(rect.width, rect.height));
+    const targetWidth = Math.max(1, Math.round(rect.width * scale));
+    const targetHeight = Math.max(1, Math.round(rect.height * scale));
 
     const canvas = document.createElement('canvas');
     canvas.width = targetWidth;
@@ -46,7 +63,8 @@ export async function processReceiptImage(file) {
     // 透過PNGをJPEGに変換すると黒背景になるため、先に白で塗りつぶす。
     ctx.fillStyle = '#ffffff';
     ctx.fillRect(0, 0, targetWidth, targetHeight);
-    ctx.drawImage(source, 0, 0, targetWidth, targetHeight);
+    ctx.drawImage(intermediate, rect.x, rect.y, rect.width, rect.height, 0, 0, targetWidth, targetHeight);
+
 
     const webpProbe = canvas.toDataURL('image/webp', QUALITY_STEPS[0]);
     const mimeType = dataUrlMime(webpProbe) === 'image/webp' ? 'image/webp' : 'image/jpeg';

@@ -1,5 +1,5 @@
 const CACHE_PREFIX = 'receipt-expiry-';
-const CACHE_NAME = `${CACHE_PREFIX}v8`;
+const CACHE_NAME = `${CACHE_PREFIX}v9`;
 const STATIC_ASSETS = [
   '/',
   '/index.html',
@@ -8,6 +8,8 @@ const STATIC_ASSETS = [
   '/js/app.js',
   '/js/settings.js',
   '/js/queueUI.js',
+  '/js/features2.js',
+
   '/js/db.js',
   '/js/backup.js',
   '/js/queue.js',
