@@ -378,9 +378,15 @@ export function createSettings({ ui, state, byId, showToast, openModal, todayISO
     if (!file) return;
     try {
       const data = parseBackup(await file.text());
+      const incoming = `在庫${data.items.length}件・履歴${data.history.length}件・学習値${data.hints.length}件・買い物${data.shopping.length}件`;
       if (ui.backupReplace.checked) {
-        if (!window.confirm('既存の在庫・履歴・学習値・未送信キューを削除し、バックアップ内容で置き換えます。よろしいですか？')) return;
+        const currentItems = await getAllItems();
+        const message = `既存の在庫${currentItems.length}件・履歴・学習値・買い物・未送信キューをすべて削除し、
+バックアップの内容（${incoming}）で置き換えます。よろしいですか？`;
+        if (!window.confirm(message)) return;
         await clearAllData();
+      } else if (!window.confirm(`バックアップの内容（${incoming}）を既存データに追加・上書きします。よろしいですか？`)) {
+        return;
       }
       await importItems(data.items);
       await importConsumption(data.history);
