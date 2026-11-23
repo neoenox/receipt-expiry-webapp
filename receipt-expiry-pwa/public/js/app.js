@@ -780,6 +780,8 @@ function wireEvents() {
 
 async function init() {
   wireEvents();
+
+  void settings.loadMonetization();
   registerServiceWorker();
   try {
     await initDB();
