@@ -61,8 +61,6 @@ chown www-data:www-data /var/lib/receipt-expiry
 (cd "$APP_DIR" && npm ci --omit=dev)
 
 install -m 644 "$APP_DIR/oci/receipt-expiry.service" /etc/systemd/system/receipt-expiry.service
-install -m 644 "$APP_DIR/oci/receipt-expiry-notify.service" /etc/systemd/system/receipt-expiry-notify.service
-install -m 644 "$APP_DIR/oci/receipt-expiry-notify.timer" /etc/systemd/system/receipt-expiry-notify.timer
 sed "s/YOUR_DOMAIN/${DOMAIN}/g" "$APP_DIR/oci/nginx.conf" > /etc/nginx/sites-available/receipt-expiry
 ln -sfn /etc/nginx/sites-available/receipt-expiry /etc/nginx/sites-enabled/receipt-expiry
 rm -f /etc/nginx/sites-enabled/default
@@ -70,10 +68,8 @@ rm -f /etc/nginx/sites-enabled/default
 nginx -t
 systemctl daemon-reload
 systemctl enable --now receipt-expiry
-if [[ -n "$VAPID_PUBLIC_KEY" ]]; then
-  systemctl enable --now receipt-expiry-notify.timer
-else
-  echo 'VAPID 鍵が未設定のため、プッシュ通知タイマーは有効化しません。' >&2
+if [[ -z "$VAPID_PUBLIC_KEY" ]]; then
+  echo 'VAPID 鍵が未設定のため、プッシュ通知は無効です。' >&2
 fi
 systemctl reload nginx
 

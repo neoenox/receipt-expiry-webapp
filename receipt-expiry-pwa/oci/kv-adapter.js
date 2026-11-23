@@ -3,12 +3,14 @@ import path from 'node:path';
 
 /**
  * Cloudflare KV の get/put/delete/list を模したローカル永続ストア。
- * 購読やレート制限カウンタは最大 1000 件程度なので JSON ファイルで十分。
- * 書き込みはプロセス内のキューで直列化し、read-modify-write の競合を防ぐ。
+ *
+ * 値は { v: <value>, e: <expiry epoch ms> } の形で保存し、TTL も永続化する。
+ * 書き込みはこのプロセス内で直列化される。複数プロセスから同じファイルを
+ * 書かないこと（notify は server.js 内のタイマーに統合済み）。
  */
 export function createKvAdapter(filePath) {
+  /** @type {Map<string, {v: unknown, e?: number}>} */
   let data = new Map();
-  const expiresAt = new Map();
   let writeChain = Promise.resolve();
   let loaded = false;
 
@@ -19,7 +21,11 @@ export function createKvAdapter(filePath) {
       const raw = await fs.readFile(filePath, 'utf8');
       const parsed = JSON.parse(raw);
       if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
-        data = new Map(Object.entries(parsed));
+        // 旧フォーマット（プレーン値）は期限なしとして移行読み込みする。
+        data = new Map(Object.entries(parsed).map(([key, value]) => [
+          key,
+          value && typeof value === 'object' && 'v' in value ? value : { v: value },
+        ]));
       }
     } catch (error) {
       if (error.code !== 'ENOENT') throw error;
@@ -39,28 +45,33 @@ export function createKvAdapter(filePath) {
     return result;
   }
 
+  function isExpired(entry) {
+    return Boolean(entry && Number.isFinite(entry.e) && Date.now() >= entry.e);
+  }
+
   return {
     async get(key) {
       await load();
-      const expiry = expiresAt.get(key);
-      if (expiry && Date.now() >= expiry) {
+      const entry = data.get(key);
+      if (!entry) return null;
+      if (isExpired(entry)) {
         await this.delete(key);
         return null;
       }
-      return data.has(key) ? data.get(key) : null;
+      return entry.v;
     },
 
     put(key, value, options = {}) {
+      const now = Date.now();
       return enqueueWrite(async () => {
         await load();
-        data.set(key, value);
-        await persist();
-        // expirationTtl は Cloudflare KV 準拠。期限切れキーは読み取り時に除外する。
+        const entry = { v: value };
         if (Number.isFinite(options.expirationTtl)) {
-          // Node の setTimeout は 32bit ms 制限があるため、期限はキーに保持して
-          // 読み取り時に判定する（24日を超える TTL でも安全に動く）。
-          expiresAt.set(key, Date.now() + options.expirationTtl * 1000);
+          entry.e = now + options.expirationTtl * 1000;
         }
+        // TTL なしの put は古い期限を明示的に消す（Cloudflare と同じ挙動）。
+        data.set(key, entry);
+        await persist();
       });
     },
 
@@ -68,13 +79,21 @@ export function createKvAdapter(filePath) {
       return enqueueWrite(async () => {
         await load();
         data.delete(key);
-        expiresAt.delete(key);
         await persist();
       });
     },
 
     async list({ prefix = '', limit = 1000, cursor } = {}) {
       await load();
+      // list にも期限切れキーは出さない。削除は書き込みキューに積んで永続化する。
+      let pruned = false;
+      for (const [key, entry] of data) {
+        if (isExpired(entry)) {
+          data.delete(key);
+          pruned = true;
+        }
+      }
+      if (pruned) await enqueueWrite(() => persist());
       const keys = Array.from(data.keys())
         .filter((key) => key.startsWith(prefix))
         .sort();

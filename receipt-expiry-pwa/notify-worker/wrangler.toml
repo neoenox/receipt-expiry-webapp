@@ -9,7 +9,7 @@ id = "144d3da77b74483f92a3397b0bf5647e"
 
 [vars]
 VAPID_PUBLIC_KEY = "BBH70Vd1epc-FBv8gqa8ZrwgLMcXqJMq4eTHzloq7NW_9oBkqriptpJ100zUK_7oDv9Pb6_qLE64gxPtIJObuFk"
-VAPID_SUBJECT = "mailto:neoenox@gmail.com"
+VAPID_SUBJECT = "mailto:admin@localhost"
 
 [triggers]
 crons = ["0 * * * *"]
