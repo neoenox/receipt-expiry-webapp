@@ -97,4 +97,4 @@ Cloudflare では `wrangler.toml` の `RATE_LIMIT_KV` バインディング（KV
 
 設定の「サポート」タブに GitHub Sponsors への導線を設置しています（既定: `https://github.com/sponsors/neoenox`）。
 
-広告は Cloudflare の変数 `ADSENSE_CLIENT_ID` と `ADSENSE_SLOT_ID` を設定すると有効になります。AdSense の審査と公開準備（プライバシーポリシー等）は別途必要です。未設定の場合は広告を読み込みません。
+AdSense は自動広告を有効化済みです（パブリッシャー ID: `ca-pub-2249200824903407`）。`ADSENSE_CLIENT_ID` を設定すると AdSense スクリプトを読み込み、`ADSENSE_SLOT_ID` を設定すると手動広告枠も表示します。サイトは Google の審査中で、承認後に広告が配信されます。
