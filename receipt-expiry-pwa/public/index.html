@@ -52,9 +52,16 @@
       <div class="list-heading">
         <h2>在庫一覧</h2>
         <span id="item-count" class="count">0件</span>
+
+        <div class="heading-actions">
+          <button id="shopping-btn" class="text-btn" type="button">買い物リスト</button>
+          <button id="view-toggle" class="text-btn" type="button">カレンダー</button>
+        </div>
       </div>
 
       <div id="item-list" class="item-list" aria-live="polite"></div>
+
+      <div id="calendar-view" class="calendar-view hidden"></div>
 
       <div id="empty-state" class="empty-state">
         <div class="empty-icon" aria-hidden="true">🧾</div>
@@ -75,7 +82,7 @@
   </div>
 
   <input id="camera-input" type="file" accept="image/*" capture="environment" hidden>
-  <input id="gallery-input" type="file" accept="image/*" hidden>
+  <input id="gallery-input" type="file" accept="image/*" multiple hidden>
 
   <div id="source-modal" class="overlay hidden" role="dialog" aria-modal="true" aria-labelledby="source-title">
     <div class="sheet">
@@ -86,6 +93,41 @@
       <button id="source-cancel" class="menu-btn is-ghost" type="button">キャンセル</button>
     </div>
   </div>
+
+  <div id="preview-modal" class="overlay hidden" role="dialog" aria-modal="true" aria-labelledby="preview-title">
+    <div class="sheet sheet-wide">
+      <h2 id="preview-title">画像を確認 <span id="preview-progress" class="count"></span></h2>
+      <p class="hint">向きやトリミングを調整してから解析します。</p>
+      <img id="preview-image" class="preview-image" alt="レシートのプレビュー">
+      <div class="inline-actions">
+        <button id="preview-rotate" class="btn is-ghost" type="button">90°回転</button>
+      </div>
+      <div class="crop-controls">
+        <label>上<input id="crop-top" type="range" min="0" max="40" value="0"></label>
+        <label>下<input id="crop-bottom" type="range" min="0" max="40" value="0"></label>
+        <label>左<input id="crop-left" type="range" min="0" max="40" value="0"></label>
+        <label>右<input id="crop-right" type="range" min="0" max="40" value="0"></label>
+      </div>
+      <div class="sheet-actions">
+        <button id="preview-cancel" class="btn is-ghost" type="button">キャンセル</button>
+        <button id="preview-confirm" class="btn is-primary" type="button">解析する</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="shopping-modal" class="overlay hidden" role="dialog" aria-modal="true" aria-labelledby="shopping-title">
+    <div class="sheet">
+      <h2 id="shopping-title">買い物リスト</h2>
+      <p class="hint">よく食べた食材から、今在庫にないものを提案します。</p>
+      <div id="shopping-suggestions" class="shopping-list"></div>
+      <h3>登録済み</h3>
+      <div id="shopping-items" class="shopping-list"></div>
+      <div class="sheet-actions">
+        <button id="shopping-close" class="btn is-ghost" type="button">閉じる</button>
+      </div>
+    </div>
+  </div>
+
 
   <div id="loading-overlay" class="overlay hidden" role="status" aria-live="polite">
     <div class="loading-box">
@@ -195,6 +237,10 @@
         <section class="settings-section">
           <h3>賞味期限の通知</h3>
           <p class="hint">有効にすると、最も近い賞味期限の日付だけを保存し、その日にプッシュ通知を送ります。食材名は送信しません。</p>
+
+          <label class="field">通知する時刻（日本時間）
+            <select id="notify-hour"></select>
+          </label>
           <div class="inline-actions">
             <button id="notify-enable-btn" class="btn is-primary" type="button">通知を有効にする</button>
             <button id="notify-disable-btn" class="btn is-ghost" type="button">無効にする</button>

@@ -1,10 +1,12 @@
 const DB_NAME = 'ReceiptExpiryDB';
-const DB_VERSION = 5;
+const DB_VERSION = 6;
 const STORE = {
   items: 'food_items',
   queue: 'analysisQueue',
   history: 'consumptionHistory',
   hints: 'expiryHints',
+
+  shopping: 'shoppingList',
 };
 
 let dbPromise = null;
@@ -42,6 +44,10 @@ export function initDB() {
         }
         if (!db.objectStoreNames.contains(STORE.hints)) {
           db.createObjectStore(STORE.hints, { keyPath: 'name' });
+        }
+
+        if (!db.objectStoreNames.contains(STORE.shopping)) {
+          db.createObjectStore(STORE.shopping, { keyPath: 'id' });
         }
       };
 
@@ -192,5 +198,28 @@ export function clearAllData() {
   return withStore('readwrite', (store) => { store.clear(); }, STORE.items)
     .then(() => withStore('readwrite', (store) => { store.clear(); }, STORE.queue))
     .then(() => withStore('readwrite', (store) => { store.clear(); }, STORE.history))
-    .then(() => withStore('readwrite', (store) => { store.clear(); }, STORE.hints));
+    .then(() => withStore('readwrite', (store) => { store.clear(); }, STORE.hints))
+    .then(() => withStore('readwrite', (store) => { store.clear(); }, STORE.shopping));
+}
+
+
+export function addShoppingItems(items) {
+  return withStore('readwrite', (store) => {
+    for (const item of items) store.put(item);
+  }, STORE.shopping);
+}
+
+export function listShoppingItems() {
+  return withStore('readonly', (store, setResult) => {
+    const request = store.getAll();
+    request.onsuccess = () => { setResult(request.result || []); };
+  }, STORE.shopping);
+}
+
+export function deleteShoppingItem(id) {
+  return withStore('readwrite', (store) => { store.delete(id); }, STORE.shopping);
+}
+
+export function clearShoppingItems() {
+  return withStore('readwrite', (store) => { store.clear(); }, STORE.shopping);
 }

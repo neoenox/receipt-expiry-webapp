@@ -1,10 +1,11 @@
-import { initDB, addItemsBulk, getAllItemsSorted, updateItem, deleteItem, enqueueAnalysis, addConsumption, listConsumption, saveExpiryHint, listExpiryHints } from './db.js';
+import { initDB, addItemsBulk, getAllItemsSorted, updateItem, deleteItem, enqueueAnalysis, addConsumption, listConsumption, saveExpiryHint, listExpiryHints, addShoppingItems, listShoppingItems, deleteShoppingItem } from './db.js';
 import { processReceiptImage } from './imageProcessor.js';
 import { analyzeReceipt, isValidDate } from './apiClient.js';
 import { createQueuedAnalysis } from './queue.js';
 import { createConsumption, summarizeHistory } from './history.js';
 import { createExpiryHint, buildHintMap, normalizeFoodName } from './learning.js';
 import { filterAndSortItems } from './inventory.js';
+import { buildShoppingSuggestions, buildCalendar } from './features2.js';
 import { createSettings, applyStoredTheme } from './settings.js';
 import { createQueueUI } from './queueUI.js';
 
@@ -17,6 +18,15 @@ const ui = {
   tabs: byId('storage-tabs'),
   list: byId('item-list'),
   itemCount: byId('item-count'),
+
+  shoppingModal: byId('shopping-modal'),
+  shoppingSuggestions: byId('shopping-suggestions'),
+  shoppingItems: byId('shopping-items'),
+  calendarView: byId('calendar-view'),
+  viewToggle: byId('view-toggle'),
+  previewModal: byId('preview-modal'),
+  previewImage: byId('preview-image'),
+  previewProgress: byId('preview-progress'),
 
   searchInput: byId('search-input'),
   sortSelect: byId('sort-select'),
@@ -86,6 +96,13 @@ const state = {
   syncingPush: false,
 
   savingKey: false,
+
+  previewFiles: [],
+  previewIndex: 0,
+  previewResults: [],
+  previewRotate: 0,
+  calendarYear: new Date().getFullYear(),
+  calendarMonth: new Date().getMonth(),
 };
 
 
@@ -237,39 +254,100 @@ function openSourceModal() {
 
 function handleFileSelected(event) {
   const input = event.currentTarget;
-  const file = input.files?.[0];
+  const files = Array.from(input.files || []);
   input.value = '';
-  if (file) void analyzeFile(file);
+  if (files.length) openPreview(files);
 }
 
-async function submitAnalysis(payload) {
-  const result = await analyzeReceipt({ ...payload, customApiKey: settings.getApiKey() || undefined });
-  if (result.items.length === 0) {
-    showToast('食材が見つかりませんでした。別の画像をお試しください。');
-    return;
-  }
-  openResultModal(result);
-}
-
-async function analyzeFile(file) {
+function openPreview(files) {
   closeModal(ui.sourceModal);
+  state.previewFiles = files;
+  state.previewIndex = 0;
+  state.previewResults = [];
+  state.previewRotate = 0;
+  for (const id of ['crop-top', 'crop-bottom', 'crop-left', 'crop-right']) byId(id).value = '0';
+  renderPreview();
+  openModal(ui.previewModal);
+}
+
+function renderPreview() {
+  const file = state.previewFiles[state.previewIndex];
+  if (!file) return;
+  if (ui.previewImage.src.startsWith('blob:')) URL.revokeObjectURL(ui.previewImage.src);
+  ui.previewImage.src = URL.createObjectURL(file);
+  ui.previewImage.style.transform = `rotate(${state.previewRotate}deg)`;
+  ui.previewProgress.textContent = `${state.previewIndex + 1}/${state.previewFiles.length}`;
+  byId('preview-confirm').textContent = state.previewIndex + 1 < state.previewFiles.length ? '次の画像へ' : '解析する';
+}
+
+function cropOptions() {
+  return {
+    top: Number(byId('crop-top').value) / 100,
+    bottom: Number(byId('crop-bottom').value) / 100,
+    left: Number(byId('crop-left').value) / 100,
+    right: Number(byId('crop-right').value) / 100,
+  };
+}
+
+async function confirmPreview() {
+  const file = state.previewFiles[state.previewIndex];
+  if (!file) return;
   showLoading(true);
   try {
-    const { base64, mimeType } = await processReceiptImage(file);
-    const payload = { imageBase64: base64, mimeType, clientDate: todayISO() };
-    if (!navigator.onLine) {
-      await enqueueAnalysis(createQueuedAnalysis(payload));
-      await queueUI.refreshQueueStatus();
-      showToast('オフラインです。接続が戻ったら自動で解析します。');
-      return;
+    const { base64, mimeType } = await processReceiptImage(file, {
+      rotate: state.previewRotate,
+      crop: cropOptions(),
+    });
+    state.previewResults.push({ imageBase64: base64, mimeType, clientDate: todayISO() });
+    state.previewIndex += 1;
+    if (state.previewIndex < state.previewFiles.length) {
+      renderPreview();
+    } else {
+      closeModal(ui.previewModal);
+      await submitProcessed(state.previewResults);
     }
-    await submitAnalysis(payload);
   } catch (error) {
-    showToast(error.message || '解析に失敗しました。');
+    showToast(error.message || '画像を処理できませんでした。');
   } finally {
     showLoading(false);
   }
 }
+
+async function submitProcessed(payloads) {
+  if (!navigator.onLine) {
+    for (const payload of payloads) await enqueueAnalysis(createQueuedAnalysis(payload));
+    await queueUI.refreshQueueStatus();
+    showToast(`${payloads.length}件をオフラインキューに保存しました。`);
+    return;
+  }
+  await submitAnalyses(payloads);
+}
+
+async function submitAnalyses(payloads) {
+  showLoading(true);
+  try {
+    const allItems = [];
+    let purchaseDate = null;
+    for (const payload of payloads) {
+      try {
+        const result = await analyzeReceipt({ ...payload, customApiKey: settings.getApiKey() || undefined });
+        if (!purchaseDate && result.purchaseDate) purchaseDate = result.purchaseDate;
+        allItems.push(...result.items);
+      } catch (error) {
+        showToast(error.message || '解析に失敗しました。');
+      }
+    }
+    if (allItems.length) openResultModal({ purchaseDate, items: allItems });
+    else showToast('食材が見つかりませんでした。');
+  } finally {
+    showLoading(false);
+  }
+}
+
+async function submitAnalysis(payload) {
+  await submitAnalyses([payload]);
+}
+
 
 
 /* ---------- 解析結果の確認・一括登録 ---------- */
@@ -418,6 +496,115 @@ async function refreshHistorySummary() {
 }
 
 
+function makeId() {
+  if (typeof crypto !== 'undefined' && crypto.randomUUID) return crypto.randomUUID();
+  return `shop-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+}
+
+async function refreshShopping() {
+  const history = await listConsumption();
+  const suggestions = buildShoppingSuggestions(history, state.items);
+  const saved = await listShoppingItems();
+
+  state.shoppingCache = saved;
+
+  ui.shoppingSuggestions.replaceChildren();
+  for (const suggestion of suggestions) {
+    const row = document.createElement('div');
+    row.className = 'shopping-row';
+    const label = document.createElement('span');
+    label.textContent = `${suggestion.name}（${suggestion.count}回）`;
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.dataset.name = suggestion.name;
+    button.textContent = '追加';
+    row.append(label, button);
+    ui.shoppingSuggestions.append(row);
+  }
+
+  ui.shoppingItems.replaceChildren();
+  for (const item of saved) {
+    const row = document.createElement('div');
+    row.className = 'shopping-row';
+    const label = document.createElement('span');
+    label.textContent = item.name;
+    const add = document.createElement('button');
+    add.type = 'button';
+    add.dataset.add = item.id;
+    add.textContent = '在庫へ';
+    const remove = document.createElement('button');
+    remove.type = 'button';
+    remove.dataset.remove = item.id;
+    remove.textContent = '削除';
+    row.append(label, add, remove);
+    ui.shoppingItems.append(row);
+  }
+}
+
+async function openShopping() {
+  await refreshShopping();
+  openModal(ui.shoppingModal);
+}
+
+function renderCalendar() {
+  const days = buildCalendar(state.items, state.calendarYear, state.calendarMonth);
+  const firstDay = new Date(state.calendarYear, state.calendarMonth, 1).getDay();
+  const dayCount = new Date(state.calendarYear, state.calendarMonth + 1, 0).getDate();
+  const grid = document.createElement('div');
+  grid.className = 'calendar-grid';
+  const header = document.createElement('div');
+  header.className = 'calendar-header';
+  const prev = document.createElement('button');
+  prev.type = 'button';
+  prev.dataset.calendar = 'prev';
+  prev.textContent = '‹';
+  const label = document.createElement('strong');
+  label.textContent = `${state.calendarYear}年 ${state.calendarMonth + 1}月`;
+  const next = document.createElement('button');
+  next.type = 'button';
+  next.dataset.calendar = 'next';
+  next.textContent = '›';
+  header.append(prev, label, next);
+  for (let i = 0; i < firstDay; i += 1) {
+    const empty = document.createElement('div');
+    empty.className = 'calendar-cell is-empty';
+    grid.append(empty);
+  }
+  for (let day = 1; day <= dayCount; day += 1) {
+    const cell = document.createElement('div');
+    cell.className = 'calendar-cell';
+    const number = document.createElement('div');
+    number.className = 'calendar-day';
+    number.textContent = String(day);
+    cell.append(number);
+    for (const item of days.get(day) || []) {
+      const name = document.createElement('div');
+      name.className = 'calendar-item';
+      name.textContent = item.name;
+      cell.append(name);
+    }
+    grid.append(cell);
+  }
+  ui.calendarView.replaceChildren(header, grid);
+}
+
+function toggleView() {
+  const showingCalendar = !ui.calendarView.classList.contains('hidden');
+  if (showingCalendar) {
+    ui.calendarView.classList.add('hidden');
+    ui.list.classList.remove('hidden');
+    ui.emptyState.classList.toggle('hidden', state.items.length > 0);
+    ui.viewToggle.textContent = 'カレンダー';
+  } else {
+    renderCalendar();
+    ui.calendarView.classList.remove('hidden');
+    ui.list.classList.add('hidden');
+    ui.emptyState.classList.add('hidden');
+    ui.viewToggle.textContent = '一覧';
+  }
+}
+
+
 function registerPWAEvents() {
   window.addEventListener('beforeinstallprompt', (event) => {
     event.preventDefault();
@@ -468,6 +655,51 @@ function wireEvents() {
   ui.cameraInput.addEventListener('change', handleFileSelected);
   ui.galleryInput.addEventListener('change', handleFileSelected);
 
+
+  byId('preview-rotate').addEventListener('click', () => {
+    state.previewRotate = (state.previewRotate + 90) % 360;
+    ui.previewImage.style.transform = `rotate(${state.previewRotate}deg)`;
+  });
+  byId('preview-confirm').addEventListener('click', () => void confirmPreview());
+  byId('preview-cancel').addEventListener('click', () => closeModal(ui.previewModal));
+
+  byId('shopping-btn').addEventListener('click', () => void openShopping());
+  byId('shopping-close').addEventListener('click', () => closeModal(ui.shoppingModal));
+  ui.shoppingSuggestions.addEventListener('click', (event) => {
+    const name = event.target.dataset.name;
+    if (!name) return;
+    void addShoppingItems([{ id: makeId(), name, createdAt: Date.now() }]).then(refreshShopping);
+  });
+  ui.shoppingItems.addEventListener('click', (event) => {
+    const addId = event.target.dataset.add;
+    const removeId = event.target.dataset.remove;
+    if (addId) {
+      const item = (state.shoppingCache || []).find((entry) => entry.id === addId);
+      void (async () => {
+        if (item) {
+          await addItemsBulk([{ name: item.name, storage: 'pantry', expiryDate: defaultExpiryISO(), quantity: '' }]);
+          await refreshItems();
+        }
+        await deleteShoppingItem(addId);
+        await refreshShopping();
+        showToast('在庫に追加しました。');
+      })();
+    } else if (removeId) {
+      void deleteShoppingItem(removeId).then(refreshShopping);
+    }
+  });
+
+  ui.viewToggle.addEventListener('click', toggleView);
+  ui.calendarView.addEventListener('click', (event) => {
+    const direction = event.target.dataset.calendar;
+    if (!direction) return;
+    if (direction === 'prev') state.calendarMonth -= 1;
+    else state.calendarMonth += 1;
+    if (state.calendarMonth < 0) { state.calendarMonth = 11; state.calendarYear -= 1; }
+    if (state.calendarMonth > 11) { state.calendarMonth = 0; state.calendarYear += 1; }
+    renderCalendar();
+  });
+
   ui.resultItems.addEventListener('click', (event) => {
     if (event.target.closest('.row-remove')) {
       event.target.closest('.result-row').remove();
@@ -515,7 +747,7 @@ function wireEvents() {
     renderList();
   });
 
-  for (const overlay of [ui.sourceModal, ui.resultModal, ui.editModal, ui.consumeModal, ui.settingsModal]) {
+  for (const overlay of [ui.sourceModal, ui.previewModal, ui.shoppingModal, ui.resultModal, ui.editModal, ui.consumeModal, ui.settingsModal]) {
     overlay.addEventListener('click', (event) => {
       if (event.target === overlay) closeModal(overlay);
     });
@@ -557,6 +789,8 @@ async function init() {
 
     await settings.syncPushReminder();
     await refreshHistorySummary();
+
+    await refreshShopping();
     await queueUI.processQueue();
     await refreshItems();
   } catch (error) {

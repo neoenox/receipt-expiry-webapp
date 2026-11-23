@@ -6,6 +6,16 @@ import { daysUntilDate } from './dates.js';
 const BYOK_STORAGE_KEY = 'receipt-expiry-gemini-key';
 const NOTIFY_STORAGE_KEY = 'receipt-expiry-notify';
 const THEME_STORAGE_KEY = 'receipt-expiry-theme';
+const NOTIFY_HOUR_KEY = 'receipt-expiry-notify-hour';
+
+function notifyHour() {
+  try {
+    const value = Number(localStorage.getItem(NOTIFY_HOUR_KEY));
+    return Number.isInteger(value) && value >= 0 && value <= 23 ? value : 6;
+  } catch {
+    return 6;
+  }
+}
 
 function storedTheme() {
   try {
@@ -62,6 +72,17 @@ export function createSettings({ ui, state, byId, showToast, openModal, todayISO
     ui.backupReplace.checked = false;
 
     byId('theme-select').value = storedTheme();
+
+    const hourSelect = byId('notify-hour');
+    if (!hourSelect.options.length) {
+      for (let hour = 0; hour < 24; hour += 1) {
+        const option = document.createElement('option');
+        option.value = String(hour);
+        option.textContent = `${hour}:00`;
+        hourSelect.append(option);
+      }
+    }
+    hourSelect.value = String(notifyHour());
     refreshNotifyStatus();
     refreshQueueStatus();
     refreshHistorySummary();
@@ -194,6 +215,8 @@ export function createSettings({ ui, state, byId, showToast, openModal, todayISO
           subscription: subscription.toJSON(),
           nextExpiry: dates[0] || null,
           daysUntil: dates[0] ? daysUntilDate(dates[0]) : null,
+
+          notifyHour: notifyHour(),
         }),
       });
     } catch {
@@ -277,6 +300,12 @@ export function createSettings({ ui, state, byId, showToast, openModal, todayISO
     ui.backupInput.addEventListener('change', handleBackupFileSelected);
     ui.notifyEnableBtn.addEventListener('click', () => void enableNotifications());
     ui.notifyDisableBtn.addEventListener('click', () => void disableNotifications());
+    byId('notify-hour').addEventListener('change', (event) => {
+      try { localStorage.setItem(NOTIFY_HOUR_KEY, event.target.value); } catch { /* 保存不可でも反映する */ }
+      void syncPushReminder();
+      showToast(`通知時刻を${event.target.value}:00にしました。`);
+    });
+
     byId('theme-select').addEventListener('change', (event) => {
       const theme = event.target.value;
       try { localStorage.setItem(THEME_STORAGE_KEY, theme); } catch { /* 保存不可でも切替は反映する */ }
