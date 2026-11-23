@@ -299,7 +299,7 @@ async function renderPreview() {
     if (source?.close) source.close();
   }
   ui.previewProgress.textContent = `${state.previewIndex + 1}/${state.previewFiles.length}`;
-  byId('preview-confirm').textContent = state.previewIndex + 1 < state.previewFiles.length ? '次の画像へ' : '解析する';
+  byId('preview-confirm').textContent = state.previewIndex + 1 < state.previewFiles.length ? '次の画像へ' : '読み取る';
 }
 
 function loadPreviewImage(file) {
