@@ -101,7 +101,7 @@ export function createSettings({ ui, state, byId, showToast, openModal, todayISO
           ? 'APIキーを使用中です（このタブを閉じるまで保持します）。'
           : 'このセッションでAPIキーを使用中です（再読み込みで消去されます）。';
       })()
-      : '未設定の場合は、アプリ側の共通キーで解析します。';
+      : '未設定の場合は、アプリ側の共通キーで読み取ります。';
   }
   function applyAdConsent(value) {
     try { localStorage.setItem(AD_CONSENT_KEY, value); } catch { /* 保存不可でも反映する */ }
@@ -405,7 +405,7 @@ export function createSettings({ ui, state, byId, showToast, openModal, todayISO
       const incoming = `在庫${data.items.length}件・履歴${data.history.length}件・期限の記憶${data.hints.length}件・買い物${data.shopping.length}件`;
       if (ui.backupReplace.checked) {
         const currentItems = await getAllItems();
-        const message = `既存の在庫${currentItems.length}件・履歴・期限の記憶・買い物・未送信の解析をすべて削除し、
+        const message = `既存の在庫${currentItems.length}件・履歴・期限の記憶・買い物・保存済みのレシートをすべて削除し、
 バックアップの内容（${incoming}）で置き換えます。よろしいですか？`;
         if (!window.confirm(message)) return;
         await clearAllData();

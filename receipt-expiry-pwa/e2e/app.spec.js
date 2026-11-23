@@ -115,12 +115,12 @@ test('offline analysis is queued and retried after reconnection', async ({ page 
 
   await expect(page.locator('#preview-modal')).toBeVisible();
   await page.click('#preview-confirm');
-  await expect(page.locator('#toast')).toContainText('オフラインキューに保存しました');
+  await expect(page.locator('#toast')).toContainText('接続が戻ったら読み取ります');
 
   await page.click('#settings-btn');
 
   await page.click('[data-settings-tab="notify"]');
-  await expect(page.locator('#queue-status')).toContainText('未送信の解析: 1件');
+  await expect(page.locator('#queue-status')).toContainText('まだ読み取っていないレシート: 1件');
   await expect(page.locator('.queue-row')).toHaveCount(1);
 
   await page.unroute('**/api/analyze');
@@ -138,7 +138,7 @@ test('offline analysis is queued and retried after reconnection', async ({ page 
 
   await page.keyboard.press('Escape');
 
-  await expect(page.locator('#queue-status')).toContainText('未送信の解析はありません');
+  await expect(page.locator('#queue-status')).toContainText('読み取っていないレシートはありません');
 });
 
 
@@ -173,7 +173,7 @@ test('BYOK key is validated before it is stored', async ({ page }) => {
   await page.reload();
   await page.click('#settings-btn');
   await page.click('[data-settings-tab="data"]');
-  await expect(page.locator('#api-key-status')).toContainText('共通キーで解析します');
+  await expect(page.locator('#api-key-status')).toContainText('共通キーで読み取ります');
 });
 
 test('BYOK key can be kept for the tab when requested', async ({ page }) => {

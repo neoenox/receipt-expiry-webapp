@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#10b981">
-  <meta name="description" content="レシートを撮影するだけで食材と賞味期限を自動管理できるPWA">
+  <meta name="description" content="レシートの写真から食材と賞味期限を記録できるアプリ">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-title" content="賞味期限スキャン">
   <link rel="manifest" href="/manifest.json">
@@ -20,7 +20,7 @@
         <span class="brand-mark" aria-hidden="true">✓</span>
         <div>
           <h1>レシート賞味期限</h1>
-          <p>撮影して、食材をムダなく。</p>
+          <p>レシートから、賞味期限を記録。</p>
         </div>
       </div>
       <button id="settings-btn" class="icon-btn" type="button" aria-label="設定を開く" title="設定">
@@ -97,7 +97,7 @@
   <div id="preview-modal" class="overlay hidden" role="dialog" aria-modal="true" aria-labelledby="preview-title">
     <div class="sheet sheet-wide">
       <h2 id="preview-title">画像を確認 <span id="preview-progress" class="count"></span></h2>
-      <p class="hint">向きやトリミングを調整してから解析します。</p>
+      <p class="hint">向きやトリミングを調整してから読み取ります。</p>
       <canvas id="preview-image" class="preview-image" aria-label="レシートのプレビュー"></canvas>
       <div class="inline-actions">
         <button id="preview-rotate" class="btn is-ghost" type="button">90°回転</button>
@@ -110,7 +110,7 @@
       </div>
       <div class="sheet-actions">
         <button id="preview-cancel" class="btn is-ghost" type="button">キャンセル</button>
-        <button id="preview-confirm" class="btn is-primary" type="button">解析する</button>
+        <button id="preview-confirm" class="btn is-primary" type="button">読み取る</button>
       </div>
     </div>
   </div>
@@ -132,14 +132,14 @@
   <div id="loading-overlay" class="overlay hidden" role="status" aria-live="polite">
     <div class="loading-box">
       <div class="spinner" aria-hidden="true"></div>
-      <p>AIがレシートを解析しています…</p>
+      <p>レシートを読み取っています…</p>
       <small>数秒かかる場合があります</small>
     </div>
   </div>
 
   <div id="result-modal" class="overlay hidden" role="dialog" aria-modal="true" aria-labelledby="result-title">
     <div class="sheet sheet-wide">
-      <h2 id="result-title">解析結果を確認</h2>
+      <h2 id="result-title">読み取った内容を確認</h2>
       <p id="result-summary" class="sheet-lead"></p>
       <div id="result-items" class="result-list"></div>
       <div class="sheet-actions">
@@ -205,7 +205,7 @@
       <div class="settings-tabs" role="tablist" aria-label="設定の切り替え">
         <button class="settings-tab is-active" type="button" role="tab" aria-selected="true" data-settings-tab="basic">基本</button>
         <button class="settings-tab" type="button" role="tab" aria-selected="false" data-settings-tab="notify">通知</button>
-        <button class="settings-tab" type="button" role="tab" aria-selected="false" data-settings-tab="data">データ・AI</button>
+        <button class="settings-tab" type="button" role="tab" aria-selected="false" data-settings-tab="data">データ</button>
 
         <button class="settings-tab" type="button" role="tab" aria-selected="false" data-settings-tab="support">サポート</button>
       </div>
@@ -240,7 +240,7 @@
       <div class="settings-panel" data-settings-panel="notify" hidden>
         <section class="settings-section">
           <h3>賞味期限の通知</h3>
-          <p class="hint">有効にすると、賞味期限の日付だけを保存し、その日の指定時刻にプッシュ通知を送ります。通知後は次の期限へ自動で進みます。食材名は送信しません。</p>
+          <p class="hint">有効にすると、賞味期限の日付だけを保存し、その日の指定時刻にプッシュ通知を送ります。通知した後は次の期限へ進みます。食材名は送信しません。</p>
 
           <label class="field">通知する時刻（日本時間）
             <select id="notify-hour"></select>
@@ -253,7 +253,7 @@
         </section>
         <section class="settings-section">
           <h3>オフラインで撮影したレシート</h3>
-          <p class="hint">オフラインで撮影したレシートは接続復帰後に自動解析します。APIキーは保存しません。</p>
+          <p class="hint">オフラインで撮影したレシートは、接続が戻った後に読み取ります。APIキーは保存しません。</p>
           <div class="inline-actions">
             <button id="retry-queue-btn" class="btn is-primary" type="button">今すぐ再試行</button>
           </div>
