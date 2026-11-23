@@ -1,27 +1,15 @@
-function json(body, status = 200) {
-  return new Response(JSON.stringify(body), {
-    status,
-    headers: { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' },
-  });
-}
+import { json, readJsonWithLimit, requireSameOriginJson } from '../shared/http.js';
+
+const MAX_BODY_BYTES = 1024;
 
 export async function onRequestPost({ request, env }) {
-  const origin = request.headers.get('Origin');
-  if (origin) {
-    try {
-      if (origin !== new URL(request.url).origin) return json({ error: { code: 'FORBIDDEN' } }, 403);
-    } catch {
-      return json({ error: { code: 'INVALID_REQUEST' } }, 400);
-    }
-  }
+  const rejected = requireSameOriginJson(request);
+  if (rejected) return rejected;
 
-  let body;
-  try {
-    body = await request.json();
-  } catch {
-    return json({ error: { code: 'INVALID_REQUEST' } }, 400);
-  }
-  const kind = body?.kind === 'error' ? 'error' : 'success';
+  const parsed = await readJsonWithLimit(request, MAX_BODY_BYTES);
+  if (parsed.invalid) return json({ error: { code: 'INVALID_REQUEST' } }, 400);
+
+  const kind = parsed.body?.kind === 'error' ? 'error' : 'success';
   const kv = env?.PUSH_KV;
   if (!kv || typeof kv.get !== 'function' || typeof kv.put !== 'function') return json({ ok: true });
 

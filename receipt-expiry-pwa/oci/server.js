@@ -23,8 +23,11 @@ const MIME = {
 };
 
 function publicOrigin(request) {
+  // X-Forwarded-Host はクライアントが偽装でき、Origin チェックの基準を
+  // すり替えられるため使わない。Host とプロトのみから組み立てる。
   const proto = request.headers['x-forwarded-proto'] || 'http';
-  const host = request.headers['x-forwarded-host'] || request.headers.host;
+  const host = request.headers.host;
+  if (!host) throw new Error('Host header is missing');
   return `${proto}://${host}`;
 }
 

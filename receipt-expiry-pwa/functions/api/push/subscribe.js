@@ -1,48 +1,39 @@
-import { isSubscriptionRateLimited } from '../../public/js/features2.js';
+import { clientIp, json, readJsonWithLimit, requireSameOriginJson } from '../../shared/http.js';
 
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 const RATE_WINDOW_SECONDS = 3600;
 const MAX_PER_HOUR = 10;
 const MAX_TOTAL = 1000;
+const MAX_BODY_BYTES = 4096;
+const SUB_COUNT_KEY = 'subcount:total';
 
-function json(body, status = 200) {
-  return new Response(JSON.stringify(body), {
-    status,
-    headers: { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' },
-  });
+function isSubscriptionRateLimited(count, total) {
+  return (Number(count) || 0) > MAX_PER_HOUR || (Number(total) || 0) >= MAX_TOTAL;
 }
 
-function sameOrigin(request) {
-  const origin = request.headers.get('Origin');
-  if (!origin) return true;
+function validEndpoint(endpoint) {
+  if (!endpoint || endpoint.length > 1000) return false;
   try {
-    return origin === new URL(request.url).origin;
+    const url = new URL(endpoint);
+    return (url.protocol === 'https:' || url.protocol === 'http:') && Boolean(url.hostname);
   } catch {
     return false;
   }
 }
 
-function clientIp(request) {
-  return request.headers.get('CF-Connecting-IP')
-    || request.headers.get('X-Real-IP')
-    || 'unknown';
-}
-
 export async function onRequestPost({ request, env }) {
-  if (!sameOrigin(request)) return json({ error: { code: 'FORBIDDEN' } }, 403);
+  const rejected = requireSameOriginJson(request);
+  if (rejected) return rejected;
 
-  let body;
-  try {
-    body = await request.json();
-  } catch {
-    return json({ error: { code: 'INVALID_REQUEST' } }, 400);
-  }
+  const parsed = await readJsonWithLimit(request, MAX_BODY_BYTES);
+  if (parsed.invalid) return json({ error: { code: 'INVALID_REQUEST' } }, 400);
+  const body = parsed.body;
 
   const subscription = body?.subscription;
   const endpoint = typeof subscription?.endpoint === 'string' ? subscription.endpoint : '';
   const p256dh = typeof subscription?.keys?.p256dh === 'string' ? subscription.keys.p256dh : '';
   const auth = typeof subscription?.keys?.auth === 'string' ? subscription.keys.auth : '';
-  if (!endpoint || endpoint.length > 1000 || !p256dh || !auth) {
+  if (!validEndpoint(endpoint) || !p256dh || !auth) {
     return json({ error: { code: 'INVALID_SUBSCRIPTION' } }, 400);
   }
 
@@ -52,9 +43,24 @@ export async function onRequestPost({ request, env }) {
       const ip = clientIp(request);
       const window = Math.floor(Date.now() / 3_600_000);
       const rateKey = `subrate:${ip}:${window}`;
-      const count = Number(await kv.get(rateKey)) + 1;
-      const listing = await kv.list({ limit: MAX_TOTAL + 1 });
-      if (isSubscriptionRateLimited(count, listing.keys.length, MAX_PER_HOUR, MAX_TOTAL)) {
+      const [rateRaw, totalRaw] = await Promise.all([
+        kv.get(rateKey),
+        kv.get(SUB_COUNT_KEY),
+      ]);
+      // 初回は既存キーを数えてカウンタを初期化する（metrics:* は除外）。
+      let total = Number(totalRaw || 0);
+      if (!totalRaw) {
+        let cursor;
+        do {
+          const page = await kv.list({ cursor, limit: 1000 });
+          total += page.keys.filter((key) => !key.name.startsWith('metrics:')
+            && !key.name.startsWith('subrate:')
+            && key.name !== SUB_COUNT_KEY).length;
+          cursor = page.list_complete ? undefined : page.cursor;
+        } while (cursor);
+      }
+      const count = Number(rateRaw || 0) + 1;
+      if (isSubscriptionRateLimited(count, total)) {
         return json({ error: { code: 'RATE_LIMIT_EXCEEDED' } }, 429);
       }
       await kv.put(rateKey, String(count), { expirationTtl: RATE_WINDOW_SECONDS });
@@ -76,7 +82,12 @@ export async function onRequestPost({ request, env }) {
   if (!kv) return json({ ok: true });
 
   try {
+    const existing = await kv.get(endpoint);
     await kv.put(endpoint, JSON.stringify(entry));
+    if (!existing) {
+      const total = Number(await kv.get(SUB_COUNT_KEY) || 0) + 1;
+      await kv.put(SUB_COUNT_KEY, String(total));
+    }
   } catch {
     return json({ error: { code: 'STORE_UNAVAILABLE' } }, 503);
   }

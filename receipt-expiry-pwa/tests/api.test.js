@@ -40,6 +40,44 @@ test('rejects requests from a different origin', async () => {
   assert.equal((await response.json()).error.code, 'FORBIDDEN');
 });
 
+test('rejects requests without an Origin or with a non-JSON content type', async () => {
+  const noOrigin = new Request(`${ORIGIN}/api/analyze`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ imageBase64: VALID_IMAGE }),
+  });
+  assert.equal((await onRequestPost({ request: noOrigin, env: {} })).status, 403);
+
+  const wrongType = new Request(`${ORIGIN}/api/analyze`, {
+    method: 'POST',
+    headers: { Origin: ORIGIN, 'Content-Type': 'text/plain' },
+    body: JSON.stringify({ imageBase64: VALID_IMAGE }),
+  });
+  assert.equal((await onRequestPost({ request: wrongType, env: {} })).status, 415);
+});
+
+test('BYOK requests cannot bypass the shared-key rate limit', async (t) => {
+  withMockFetch(t, async () => aiResponse([{ name: '牛乳', storage: 'fridge', expiryDate: '2026-11-29', quantity: '1本' }]));
+  const store = new Map();
+  const env = {
+    GEMINI_API_KEY: 'shared-key',
+    RATE_LIMIT_KV: {
+      async get(key) { return store.get(key) ?? null; },
+      async put(key, value) { store.set(key, value); },
+    },
+  };
+  let last;
+  // BYOK 枠は 30/分。共有キー枠（5/分）をすり抜けても無制限ではないことを確認する。
+  for (let i = 0; i < 31; i += 1) {
+    last = await onRequestPost({
+      request: makeRequest({ imageBase64: VALID_IMAGE, customApiKey: 'x' }, { ip: '203.0.113.99' }),
+      env,
+    });
+  }
+  assert.equal(last.status, 429);
+  assert.equal((await last.json()).error.code, 'RATE_LIMIT_EXCEEDED');
+});
+
 test('rejects malformed and oversized image data', async () => {
   const malformed = await onRequestPost({
     request: makeRequest({ imageBase64: 'not base64!' }, { ip: '203.0.113.11' }),
