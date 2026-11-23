@@ -420,6 +420,31 @@ button:focus-visible, input:focus-visible, select:focus-visible {
 }
 .row-top { display: flex; align-items: flex-end; gap: 8px; }
 .row-name { flex: 1; }
+.row-select {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex: 0 0 auto;
+  height: 44px;
+  font-size: 13px;
+  color: var(--text-muted, var(--text));
+}
+.row-select input { width: 18px; height: 18px; accent-color: var(--primary); }
+.result-row.is-unselected { opacity: 0.62; }
+.row-notice {
+  margin: 8px 0 0;
+  padding: 6px 10px;
+  border-radius: 8px;
+  background: var(--warning-soft, var(--surface));
+  color: var(--warning, var(--text));
+  font-size: 13px;
+}
+.hint-expiry {
+  display: block;
+  margin-top: 4px;
+  font-size: 12px;
+  color: var(--text-muted, var(--text));
+}
 .row-remove {
   flex: 0 0 auto;
   width: 42px;

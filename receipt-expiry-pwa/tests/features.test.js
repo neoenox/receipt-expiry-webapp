@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { createQueuedAnalysis, nextAttempt, shouldDiscard, MAX_QUEUE_ATTEMPTS } from '../public/js/queue.js';
 import { createConsumption, summarizeHistory } from '../public/js/history.js';
 import { normalizeFoodName, createExpiryHint, buildHintMap } from '../public/js/learning.js';
-import { filterAndSortItems } from '../public/js/inventory.js';
+import { filterAndSortItems, annotateResultItems } from '../public/js/inventory.js';
 import { buildShoppingSuggestions, buildCalendar, shiftMonth, cropRect, shouldSendAtHour, isSubscriptionRateLimited, retryDelayMs } from '../public/js/features2.js';
 import { analyzePayloads } from '../public/js/analysisFlow.js';
 import { dataUrlMime, base64FromDataUrl, nextQuality } from '../public/js/imageOptions.js';
@@ -82,6 +82,26 @@ test('inventory search and sort are applied together', () => {
   assert.deepEqual(filterAndSortItems(items, { sort: 'name' }).map((i) => i.name), ['牛乳', '牛乳 低脂肪', '食パン']);
 });
 
+
+test('result annotations mark duplicates and learned-expiry differences', () => {
+  const rows = annotateResultItems(
+    [
+      { name: '特濃牛乳', expiryDate: '2026-12-01' },
+      { name: '食パン', expiryDate: '2026-11-25' },
+      { name: '卵', expiryDate: '2026-12-10' },
+    ],
+    {
+      stockItems: [{ name: '特濃 牛乳', expiryDate: '2026-12-01' }],
+      hints: new Map([['食パン', '2026-11-28']]),
+    }
+  );
+  assert.equal(rows[0].duplicate, true);
+  assert.equal(rows[0].selected, false);
+  assert.equal(rows[1].hint, '2026-11-28');
+  assert.equal(rows[1].hintDiffers, true);
+  assert.equal(rows[2].duplicate, false);
+  assert.equal(rows[2].selected, true);
+});
 
 test('image helpers detect format and step down quality', () => {
   assert.equal(dataUrlMime('data:image/webp;base64,AAAA'), 'image/webp');
