@@ -437,7 +437,7 @@ button:focus-visible, input:focus-visible, select:focus-visible {
 
 .settings-tabs {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(4, 1fr);
   gap: 4px;
   padding: 4px;
   margin-bottom: 12px;
@@ -652,4 +652,6 @@ button:focus-visible, input:focus-visible, select:focus-visible {
   background: var(--surface-alt);
   font-size: 13px;
 }
+
+.support-link { display: inline-block; text-decoration: none; text-align: center; }
 .shopping-row span { flex: 1; }

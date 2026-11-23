@@ -204,6 +204,8 @@
         <button class="settings-tab is-active" type="button" role="tab" aria-selected="true" data-settings-tab="basic">基本</button>
         <button class="settings-tab" type="button" role="tab" aria-selected="false" data-settings-tab="notify">通知・キュー</button>
         <button class="settings-tab" type="button" role="tab" aria-selected="false" data-settings-tab="data">データ・AI</button>
+
+        <button class="settings-tab" type="button" role="tab" aria-selected="false" data-settings-tab="support">サポート</button>
       </div>
 
       <div class="settings-panel" data-settings-panel="basic">
@@ -298,6 +300,20 @@
             <button id="clear-api-key" class="btn is-ghost" type="button">削除</button>
           </div>
           <p id="api-key-status" class="hint" aria-live="polite"></p>
+        </section>
+      </div>
+
+
+      <div class="settings-panel" data-settings-panel="support" hidden>
+        <section class="settings-section">
+          <h3>このアプリを支援</h3>
+          <p class="hint">すべての機能は無料です。Gemini API の費用や運営を支援できます。</p>
+          <a id="support-link" class="btn is-primary support-link" href="https://github.com/sponsors/neoenox" target="_blank" rel="noopener">GitHub Sponsors で支援</a>
+        </section>
+        <section class="settings-section">
+          <h3>広告</h3>
+          <p id="ad-status" class="hint" aria-live="polite"></p>
+          <div id="ad-slot"></div>
         </section>
       </div>
 

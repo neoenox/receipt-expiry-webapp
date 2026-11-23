@@ -65,6 +65,41 @@ export function createSettings({ ui, state, byId, showToast, openModal, todayISO
       ? 'この端末にAPIキーが保存されています（解析時に自動で使用されます）。'
       : '未設定の場合は、アプリ側の共通キーで解析します。';
   }
+  async function loadMonetization() {
+    try {
+      const config = await fetch('/api/config').then((response) => response.json());
+      if (config.supportUrl) byId('support-link').href = config.supportUrl;
+      const slot = byId('ad-slot');
+      if (config.adsenseClient && config.adsenseSlot) {
+        byId('ad-status').textContent = '広告を表示しています。';
+        if (!document.querySelector('script[data-adsense]')) {
+          const script = document.createElement('script');
+          script.async = true;
+          script.dataset.adsense = '1';
+          script.crossOrigin = 'anonymous';
+          script.src = `https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=${encodeURIComponent(config.adsenseClient)}`;
+          document.head.append(script);
+        }
+        if (!slot.firstChild) {
+          const ad = document.createElement('ins');
+          ad.className = 'adsbygoogle';
+          ad.style.display = 'block';
+          ad.dataset.adClient = config.adsenseClient;
+          ad.dataset.adSlot = config.adsenseSlot;
+          ad.dataset.adFormat = 'auto';
+          slot.append(ad);
+          (window.adsbygoogle = window.adsbygoogle || []).push({});
+        }
+      } else {
+        byId('ad-status').textContent = '広告は現在無効です（スポンサー募集中）。';
+        slot.replaceChildren();
+      }
+    } catch {
+      byId('ad-status').textContent = '広告設定を取得できませんでした。';
+    }
+  }
+
+
 
   function openSettings() {
     refreshApiKeyStatus();
@@ -86,6 +121,8 @@ export function createSettings({ ui, state, byId, showToast, openModal, todayISO
     refreshNotifyStatus();
     refreshQueueStatus();
     refreshHistorySummary();
+    void loadMonetization();
+
     openModal(ui.settingsModal);
   }
 

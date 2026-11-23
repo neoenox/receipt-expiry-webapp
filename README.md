@@ -91,3 +91,10 @@ Cloudflare では `wrangler.toml` の `RATE_LIMIT_KV` バインディング（KV
 - 消費履歴から買い物リストを提案し、端末内で管理できる
 - 通知時刻を日本時間で指定可能（Worker は毎時実行し、設定時刻にのみ送信）
 - 在庫を月カレンダー表示に切り替え可能
+
+
+## マネタイズ
+
+設定の「サポート」タブに GitHub Sponsors への導線を設置しています（既定: `https://github.com/sponsors/neoenox`）。
+
+広告は Cloudflare の変数 `ADSENSE_CLIENT_ID` と `ADSENSE_SLOT_ID` を設定すると有効になります。AdSense の審査と公開準備（プライバシーポリシー等）は別途必要です。未設定の場合は広告を読み込みません。
