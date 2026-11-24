@@ -103,6 +103,28 @@ test('stale backup reminder appears and clears after exporting', async ({ page }
   await expect(page.locator('#backup-reminder')).toBeHidden();
 });
 
+test('multiple items can be selected and deleted at once', async ({ page }) => {
+  await page.goto('/');
+  await resetStorage(page);
+  await addItem(page, '牛乳', '2026-12-20');
+  await addItem(page, '食パン', '2026-11-25');
+  await addItem(page, '卵', '2026-12-01');
+
+  await page.click('#select-mode-btn');
+  await expect(page.locator('#bulk-actions')).toBeVisible();
+  await expect(page.locator('.item-select')).toHaveCount(3);
+
+  await page.locator('.item-card').nth(0).click();
+  await page.locator('.item-card').nth(2).click();
+  await expect(page.locator('.item-select input:checked')).toHaveCount(2);
+
+  page.once('dialog', (dialog) => void dialog.accept());
+  await page.click('#bulk-delete-btn');
+  await expect(page.locator('#item-count')).toHaveText('1件');
+  await expect(page.locator('.item-name')).toHaveText('卵');
+  await expect(page.locator('#bulk-actions')).toBeHidden();
+});
+
 test('offline analysis is queued and retried after reconnection', async ({ page }) => {
   await page.goto('/');
   await resetStorage(page);

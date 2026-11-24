@@ -56,6 +56,11 @@
         <div class="heading-actions">
           <button id="shopping-btn" class="text-btn" type="button">買い物リスト</button>
           <button id="view-toggle" class="text-btn" type="button">カレンダー</button>
+          <button id="select-mode-btn" class="text-btn" type="button">選択</button>
+        </div>
+        <div id="bulk-actions" class="bulk-actions hidden">
+          <button id="bulk-delete-btn" class="btn is-danger" type="button">選択したものを削除</button>
+          <button id="bulk-cancel-btn" class="btn is-ghost" type="button">キャンセル</button>
         </div>
       </div>
 
@@ -341,6 +346,9 @@
 
   <template id="item-card-template">
     <article class="item-card">
+      <label class="item-select hidden">
+        <input class="field-selected" type="checkbox" aria-label="この食材を選択">
+      </label>
       <button class="item-card-main" type="button">
         <span class="item-name"></span>
         <span class="item-meta">

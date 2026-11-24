@@ -20,6 +20,10 @@ const ui = {
   tabs: byId('storage-tabs'),
   list: byId('item-list'),
   itemCount: byId('item-count'),
+  selectModeBtn: byId('select-mode-btn'),
+  bulkActions: byId('bulk-actions'),
+  bulkDeleteBtn: byId('bulk-delete-btn'),
+  bulkCancelBtn: byId('bulk-cancel-btn'),
 
   shoppingModal: byId('shopping-modal'),
   shoppingSuggestions: byId('shopping-suggestions'),
@@ -80,6 +84,7 @@ const ui = {
 const state = {
   items: [],
   filter: 'all',
+  selectMode: false,
 
   search: '',
   sort: 'expiry',
@@ -222,6 +227,9 @@ function renderList() {
   ui.list.replaceChildren();
   for (const item of visible) {
     const card = ui.itemTemplate.content.firstElementChild.cloneNode(true);
+    card.dataset.id = item.id;
+    card.classList.toggle('is-select-mode', state.selectMode);
+    card.querySelector('.item-select').classList.toggle('hidden', !state.selectMode);
     card.querySelector('.item-name').textContent = item.name;
     card.querySelector('.item-storage').textContent = STORAGE_LABELS[item.storage] || '';
     card.querySelector('.item-quantity').textContent = item.quantity || '';
@@ -252,6 +260,36 @@ function renderList() {
     ui.emptyDetail.textContent = noItems
       ? 'レシートを撮影するか、＋ボタンから食材を追加してください。'
       : '別の保存場所のタブを選択してください。';
+  }
+}
+
+function setSelectMode(enabled) {
+  state.selectMode = enabled;
+  ui.selectModeBtn.classList.toggle('hidden', enabled);
+  ui.bulkActions.classList.toggle('hidden', !enabled);
+  renderList();
+}
+
+function selectedItemIds() {
+  return Array.from(ui.list.querySelectorAll('.item-select input:checked'))
+    .map((checkbox) => checkbox.closest('.item-card')?.dataset.id)
+    .filter(Boolean);
+}
+
+async function deleteSelectedItems() {
+  const ids = selectedItemIds();
+  if (!ids.length) {
+    showToast('削除する食材を選択してください。');
+    return;
+  }
+  if (!window.confirm(`選択した${ids.length}件の食材を削除します。よろしいですか？`)) return;
+  try {
+    for (const id of ids) await deleteItem(id);
+    setSelectMode(false);
+    await refreshItems();
+    showToast(`${ids.length}件の食材を削除しました。`);
+  } catch (error) {
+    showToast(error.message || '削除に失敗しました。');
   }
 }
 
@@ -766,6 +804,17 @@ function wireEvents() {
     } else if (removeId) {
       void deleteShoppingItem(removeId).then(refreshShopping);
     }
+  });
+
+  ui.selectModeBtn.addEventListener('click', () => setSelectMode(true));
+  ui.bulkCancelBtn.addEventListener('click', () => setSelectMode(false));
+  ui.bulkDeleteBtn.addEventListener('click', () => void deleteSelectedItems());
+  ui.list.addEventListener('click', (event) => {
+    if (!state.selectMode) return;
+    const card = event.target.closest('.item-card');
+    const checkbox = card?.querySelector('.item-select input');
+    if (!checkbox || event.target === checkbox) return;
+    checkbox.checked = !checkbox.checked;
   });
 
   ui.viewToggle.addEventListener('click', calendarUI.toggle);

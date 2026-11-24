@@ -650,6 +650,11 @@ button:focus-visible, input:focus-visible, select:focus-visible {
 
 
 .heading-actions { display: flex; gap: 10px; align-items: center; }
+.bulk-actions { display: flex; gap: 8px; margin: 8px 0 4px; }
+.item-card.is-select-mode .item-card-main { flex: 1; pointer-events: none; opacity: .85; }
+.item-select { display: flex; align-items: center; flex: 0 0 auto; }
+.item-select input { width: 20px; height: 20px; accent-color: var(--primary); }
+.item-card.is-select-mode { cursor: pointer; }
 .text-btn {
   border: 0;
   background: none;
