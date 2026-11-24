@@ -83,14 +83,28 @@ export function createSettings({ ui, state, byId, showToast, openModal, todayISO
     }
   }
 
+  // 設定フラグは有効なのにプッシュ購読が消えている場合の検知結果。
+  // 再登録の導線は持たず、表示に反映するだけにとどめる。
+  let subscriptionMissing = false;
+
   function refreshNotifyStatus() {
     if (!('Notification' in window) || !('serviceWorker' in navigator) || !('PushManager' in window)) {
-      ui.notifyStatus.textContent = 'このブラウザはプッシュ通知に対応していません。';
+      ui.notifyStatus.textContent = 'このブラウザは通知に対応していません。';
       return;
     }
-    ui.notifyStatus.textContent = isNotifyEnabled()
-      ? `通知を有効にしています（日本時間 ${String(notifyHour()).padStart(2, '0')}:00 / ${Notification.permission}）。`
-      : `通知は無効です（有効化すると日本時間 ${String(notifyHour()).padStart(2, '0')}:00 に通知します）。`;
+    const time = `日本時間 ${String(notifyHour()).padStart(2, '0')}:00`;
+    if (!isNotifyEnabled()) {
+      subscriptionMissing = false;
+      ui.notifyStatus.textContent = `リマインダ通知は無効です。有効にすると ${time} にお知らせします。`;
+      return;
+    }
+    const permission = Notification.permission === 'granted' ? 'ブラウザの許可あり'
+      : Notification.permission === 'denied' ? 'ブラウザの許可なし' : 'ブラウザの許可を確認中';
+    if (subscriptionMissing) {
+      ui.notifyStatus.textContent = `リマインダ通知は有効ですが、この端末への通知の登録が見つかりません。通知が届かない場合は、通知を一度無効にしてから有効にしてください（${time} / ${permission}）。`;
+      return;
+    }
+    ui.notifyStatus.textContent = `リマインダ通知は有効です（${time} / ${permission}）。`;
   }
 
   function refreshApiKeyStatus() {
@@ -283,7 +297,7 @@ export function createSettings({ ui, state, byId, showToast, openModal, todayISO
   async function enableNotifications() {
     try {
       if (!('Notification' in window) || !('serviceWorker' in navigator) || !('PushManager' in window)) {
-        ui.notifyStatus.textContent = 'このブラウザはプッシュ通知に対応していません。';
+        ui.notifyStatus.textContent = 'このブラウザは通知に対応していません。';
         return;
       }
       const permission = await Notification.requestPermission();
@@ -334,17 +348,24 @@ export function createSettings({ ui, state, byId, showToast, openModal, todayISO
   }
 
   async function syncPushReminder() {
-    if (state.syncingPush || !isNotifyEnabled()) return;
+    if (!isNotifyEnabled()) {
+      subscriptionMissing = false;
+      refreshNotifyStatus();
+      return;
+    }
+    if (state.syncingPush) return;
     state.syncingPush = true;
     try {
       const registration = await navigator.serviceWorker.ready;
       const subscription = await registration.pushManager.getSubscription();
+      subscriptionMissing = !subscription;
+      refreshNotifyStatus();
       if (!subscription) return;
       const dates = state.items
         .map((item) => item.expiryDate)
         .filter((date) => isValidDate(date))
         .sort();
-      await fetch('/api/push/subscribe', {
+      const response = await fetch('/api/push/subscribe', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -356,6 +377,11 @@ export function createSettings({ ui, state, byId, showToast, openModal, todayISO
           notifyHour: notifyHour(),
         }),
       });
+      if (response.status === 410) {
+        // サーバー側で購読が失われた場合も、ボタンを増やさず表示だけで伝える。
+        subscriptionMissing = true;
+        refreshNotifyStatus();
+      }
     } catch {
       // 通知の同期失敗は在庫操作を止めない。
     } finally {

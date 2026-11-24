@@ -17,7 +17,9 @@ export function createQueuedAnalysis({ imageBase64, mimeType, clientDate }, { re
   return {
     id: newId(),
     imageBase64,
-    mimeType: mimeType === 'image/png' ? 'image/png' : 'image/jpeg',
+    // imageProcessor.js は WebP 対応ブラウザで image/webp を返す。
+    // サーバーは image/png と image/webp を受け付けるので、実データと宣言がずれないよう保持する。
+    mimeType: ['image/png', 'image/webp'].includes(mimeType) ? mimeType : 'image/jpeg',
     clientDate: DATE_PATTERN.test(clientDate || '') ? clientDate : new Date().toISOString().slice(0, 10),
     createdAt: Date.now(),
     attempts: 0,

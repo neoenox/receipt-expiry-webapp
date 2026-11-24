@@ -257,16 +257,80 @@ test('notification opt-in succeeds with a subscribed push manager', async ({ pag
   await page.click('#settings-btn');
   await page.click('[data-settings-tab="notify"]');
   await page.click('#notify-enable-btn');
-  await expect(page.locator('#notify-status')).toContainText('通知を有効にしています');
+  await expect(page.locator('#notify-status')).toContainText('リマインダ通知は有効です');
   await expect.poll(() => subscribeRequests.length).toBeGreaterThan(0);
   expect(subscribeRequests[0].subscription.endpoint).toBe('https://example.test/e2e');
   expect(subscribeRequests[0].expiryDates).toContain('2026-12-20');
 
   await page.selectOption('#notify-hour', '8');
   await expect(page.locator('#notify-status')).toContainText('08:00');
-  await expect.poll(() => subscribeRequests.at(-1)?.notifyHour).toBe(8);
+  // syncPushReminder は在庫更新などからも呼ばれるため、末尾が時刻変更のリクエストとは限らない。
+  // 時刻変更が反映されたリクエストが1度でも飛べばよい。
+  await expect.poll(() => subscribeRequests.some((body) => body.notifyHour === 8)).toBe(true);
 });
 
+
+test('notify status warns when a push subscription is gone (410 from subscribe API)', async ({ page }) => {
+  await page.addInitScript(() => {
+    Object.defineProperty(Notification, 'permission', { get: () => 'granted' });
+    Notification.requestPermission = async () => 'granted';
+    const subscription = {
+      endpoint: 'https://example.test/e2e-gone',
+      keys: { p256dh: 'AAA', auth: 'BBB' },
+      toJSON() { return { endpoint: this.endpoint, keys: this.keys }; },
+      unsubscribe: async () => true,
+    };
+    PushManager.prototype.getSubscription = async () => subscription;
+  });
+  await page.goto('/');
+  await resetStorage(page);
+
+  await page.route('**/api/push/subscribe', (route) => route.fulfill({
+    status: 410,
+    contentType: 'application/json',
+    body: JSON.stringify({ error: { code: 'SUBSCRIPTION_GONE' } }),
+  }));
+
+  await page.click('#settings-btn');
+  await page.click('[data-settings-tab="notify"]');
+  await page.click('#notify-enable-btn');
+  await expect(page.locator('#notify-status')).toContainText('通知を一度無効にしてから有効にしてください');
+});
+
+test('notify status warns when getSubscription returns null after enabling', async ({ page }) => {
+  await page.addInitScript(() => {
+    Object.defineProperty(Notification, 'permission', { get: () => 'granted' });
+    Notification.requestPermission = async () => 'granted';
+    const subscription = {
+      endpoint: 'https://example.test/e2e-null',
+      keys: { p256dh: 'AAA', auth: 'BBB' },
+      toJSON() { return { endpoint: this.endpoint, keys: this.keys }; },
+      unsubscribe: async () => true,
+    };
+    window.__subscriptionExists = true;
+    PushManager.prototype.getSubscription = async () => (window.__subscriptionExists ? subscription : null);
+    const originalUnsubscribe = subscription.unsubscribe.bind(subscription);
+    subscription.unsubscribe = async () => {
+      window.__subscriptionExists = false;
+      return originalUnsubscribe();
+    };
+  });
+  await page.goto('/');
+  await resetStorage(page);
+
+  await page.click('#settings-btn');
+  await page.click('[data-settings-tab="notify"]');
+  await page.click('#notify-enable-btn');
+  await expect(page.locator('#notify-status')).toContainText('リマインダ通知は有効です');
+
+  // ブラウザ側の購読が消えた状態を再現し、設定を開き直す。
+  // addInitScript はリロード時に再実行されるため、フラグはページ側のグローバルに置いて維持する。
+  await page.reload();
+  await page.evaluate(() => { window.__subscriptionExists = false; });
+  await page.click('#settings-btn');
+  await page.click('[data-settings-tab="notify"]');
+  await expect(page.locator('#notify-status')).toContainText('通知を一度無効にしてから有効にしてください');
+});
 
 test('multiple receipts are previewed and merged into one result', async ({ page }) => {
   await page.goto('/');

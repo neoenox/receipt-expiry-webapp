@@ -10,7 +10,8 @@ export async function onRequestPost({ request, env }) {
   if (parsed.invalid) return json({ error: { code: 'INVALID_REQUEST' } }, 400);
 
   const kind = parsed.body?.kind === 'error' ? 'error' : 'success';
-  const increment = Math.min(100, Math.max(1, Math.round(Number(parsed.body?.count) || 1)));
+  // count は受け付けるが無視する。呼び出し側の値に関わらず 1 リクエスト = 1 加算。
+  const increment = 1;
   const kv = env?.PUSH_KV;
   if (!kv || typeof kv.get !== 'function' || typeof kv.put !== 'function') return json({ ok: true });
 
