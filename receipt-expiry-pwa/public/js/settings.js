@@ -38,7 +38,9 @@ initConsentMode();
 
 function notifyHour() {
   try {
-    const value = Number(localStorage.getItem(NOTIFY_HOUR_KEY));
+    const raw = localStorage.getItem(NOTIFY_HOUR_KEY);
+    if (raw === null) return 6;
+    const value = Number(raw);
     return Number.isInteger(value) && value >= 0 && value <= 23 ? value : 6;
   } catch {
     return 6;

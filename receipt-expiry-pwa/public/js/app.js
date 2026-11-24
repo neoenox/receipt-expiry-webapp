@@ -181,6 +181,9 @@ function openModal(element) {
   state.focusBeforeModal = document.activeElement;
   state.modalStack.push(element);
   element.classList.remove('hidden');
+  // 直前の操作のトーストがモーダルに重ならないようにする。
+  clearTimeout(state.toastTimer);
+  ui.toast.classList.add('hidden');
   element.querySelector('button, input, select, textarea')?.focus();
 }
 
