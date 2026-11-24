@@ -666,6 +666,19 @@ button:focus-visible, input:focus-visible, select:focus-visible {
   .loading-box { margin-bottom: 0; }
 }
 
+/* PC ではスマホ幅の枠を広げる。600px 未満の見た目は変えない。 */
+@media (min-width: 900px) {
+  .app-shell,
+  .action-bar {
+    max-width: 960px;
+  }
+  .item-list {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    align-items: start;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; }
 }

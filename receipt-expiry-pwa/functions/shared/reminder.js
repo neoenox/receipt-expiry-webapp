@@ -1,4 +1,4 @@
-import { jstDate, shouldSendAtHour } from '../../public/js/features2.js';
+import { jstDate, shouldSendAtHour } from './schedule.js';
 
 export const REMINDER_TITLE = 'レシート賞味期限';
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;

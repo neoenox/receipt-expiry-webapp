@@ -40,6 +40,38 @@ const responseSchema = {
   required: ['purchaseDate', 'items'],
 };
 
+/**
+ * Base64 の先頭バイトから画像形式を推定する。
+ * PNG / JPEG / WebP と判定できる場合のみ形式を返し、それ以外は null。
+ * 分からない型式は宣言をそのまま信用するため、ここでは追加検証しない。
+ */
+function detectImageMimeType(base64) {
+  let header;
+  try {
+    header = atob(base64.slice(0, 64));
+  } catch {
+    return null;
+  }
+  const bytes = new Uint8Array(header.length);
+  for (let i = 0; i < header.length; i += 1) bytes[i] = header.charCodeAt(i);
+
+  // PNG: 89 50 4E 47 0D 0A 1A 0A
+  if (bytes.length >= 8 && bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4e && bytes[3] === 0x47
+    && bytes[4] === 0x0d && bytes[5] === 0x0a && bytes[6] === 0x1a && bytes[7] === 0x0a) {
+    return 'image/png';
+  }
+  // JPEG: FF D8 FF
+  if (bytes.length >= 3 && bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff) {
+    return 'image/jpeg';
+  }
+  // WebP: "RIFF" + 4byte size + "WEBP"
+  if (bytes.length >= 12 && String.fromCharCode(...bytes.slice(0, 4)) === 'RIFF'
+    && String.fromCharCode(...bytes.slice(8, 12)) === 'WEBP') {
+    return 'image/webp';
+  }
+  return null;
+}
+
 function isValidDateString(value) {
   if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
   const [year, month, day] = value.split('-').map(Number);
@@ -245,6 +277,12 @@ export async function onRequestPost(context) {
 
   const clientDate = isValidDateString(body.clientDate) ? body.clientDate : todayString();
   const mimeType = ['image/png', 'image/webp'].includes(body.mimeType) ? body.mimeType : 'image/jpeg';
+  // キュー保存時に WebP が JPEG へ正規化される等、宣言と実データがずれていると
+  // Gemini 側でデコード失敗するため、判別できた場合だけ不一致を弾く。
+  const detectedMimeType = detectImageMimeType(imageBase64);
+  if (detectedMimeType && detectedMimeType !== mimeType) {
+    return errorResponse(400, 'INVALID_IMAGE', '画像の形式が正しくありません。');
+  }
 
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), GEMINI_TIMEOUT_MS);
