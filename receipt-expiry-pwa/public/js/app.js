@@ -239,10 +239,13 @@ function renderList() {
     if (Number.isNaN(days)) {
       badge.className = 'badge badge-warning';
       badge.textContent = '期限不明';
+      card.dataset.urgency = 'unknown';
     } else {
       const status = statusFor(days);
       badge.className = `badge ${status.className}`;
       badge.textContent = status.label;
+      card.dataset.urgency = status.className === 'badge-expired' ? 'expired'
+        : (status.className === 'badge-warning' ? 'soon' : 'safe');
     }
 
     const expiry = card.querySelector('.item-expiry');
