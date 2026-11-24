@@ -70,8 +70,6 @@ jobs:
 
       - name: Run E2E tests
         working-directory: receipt-expiry-pwa
-        env:
-          VAPID_PUBLIC_KEY: ${{ secrets.VAPID_PUBLIC_KEY }}
         run: npm run test:e2e
 
       - name: Deploy rate limiter worker
