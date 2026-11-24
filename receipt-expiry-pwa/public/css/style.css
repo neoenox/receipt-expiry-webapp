@@ -450,7 +450,16 @@ button:focus-visible, input:focus-visible, select:focus-visible {
 }
 .btn:hover { filter: brightness(1.04); box-shadow: 0 4px 12px rgba(15, 23, 42, .1); }
 .btn:active { transform: scale(.97); }
-.btn:disabled { opacity: .55; cursor: not-allowed; filter: none; box-shadow: none; transform: none; }
+.btn:disabled {
+  opacity: 1;
+  cursor: not-allowed;
+  filter: none;
+  box-shadow: none;
+  transform: none;
+  background: var(--surface-alt);
+  border-color: var(--border);
+  color: var(--muted);
+}
 .btn.is-primary {
   background: var(--primary);
   border-color: var(--primary);
@@ -635,7 +644,8 @@ button:focus-visible, input:focus-visible, select:focus-visible {
 
 .toast {
   position: fixed;
-  z-index: 40;
+  /* モーダル(20)より下。設定画面を開いたときに前の操作のトーストが邪魔しない。 */
+  z-index: 15;
   bottom: calc(96px + env(safe-area-inset-bottom));
   left: 50%;
   transform: translateX(-50%);
