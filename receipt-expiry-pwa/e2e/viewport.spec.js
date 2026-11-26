@@ -1,10 +1,10 @@
 import { test, expect } from '@playwright/test';
+import { resetStorage } from './helpers.js';
 
 async function shellWidth(page, width) {
   await page.setViewportSize({ width, height: 800 });
   await page.goto('/');
-  await page.evaluate(() => localStorage.setItem('receipt-expiry-ad-consent', 'granted'));
-  await page.reload();
+  await resetStorage(page);
   return page.evaluate(() => Math.round(document.querySelector('.app-shell').getBoundingClientRect().width));
 }
 
@@ -37,15 +37,7 @@ test('consent banner leaves the scan button reachable', async ({ page }) => {
 test('calendar keeps a long item name within the viewport', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto('/');
-  await page.evaluate(() => localStorage.setItem('receipt-expiry-ad-consent', 'granted'));
-  await page.reload();
-  await page.evaluate(async () => {
-    await new Promise((resolve) => {
-      const request = indexedDB.deleteDatabase('ReceiptExpiryDB');
-      request.onsuccess = request.onerror = request.onblocked = resolve;
-    });
-  });
-  await page.reload();
+  await resetStorage(page);
 
   await page.click('#add-btn');
   await page.fill('#edit-name', '特濃牛乳 1000ml（Sep市陽向スーパー）');

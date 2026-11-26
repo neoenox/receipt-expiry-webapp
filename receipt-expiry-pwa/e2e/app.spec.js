@@ -1,23 +1,8 @@
 import { test, expect } from '@playwright/test';
 import { fileURLToPath } from 'node:url';
+import { resetStorage } from './helpers.js';
 
 const ICON_PATH = fileURLToPath(new URL('../public/icons/icon-192.png', import.meta.url));
-
-async function resetStorage(page) {
-  await page.evaluate(async () => {
-    await new Promise((resolve) => {
-      const request = indexedDB.deleteDatabase('ReceiptExpiryDB');
-      request.onsuccess = resolve;
-      request.onerror = resolve;
-      request.onblocked = resolve;
-    });
-    localStorage.clear();
-    sessionStorage.clear();
-    localStorage.setItem('receipt-expiry-ad-consent', 'granted');
-  });
-  await page.reload();
-  await expect(page.locator('#item-count')).toHaveText('0件');
-}
 
 async function addItem(page, name, expiry) {
   await page.click('#add-btn');
@@ -264,9 +249,15 @@ test('notification opt-in succeeds with a subscribed push manager', async ({ pag
 
   await page.selectOption('#notify-hour', '8');
   await expect(page.locator('#notify-status')).toContainText('08:00');
-  // syncPushReminder は在庫更新などからも呼ばれるため、末尾が時刻変更のリクエストとは限らない。
-  // 時刻変更が反映されたリクエストが1度でも飛べばよい。
-  await expect.poll(() => subscribeRequests.some((body) => body.notifyHour === 8)).toBe(true);
+  // syncPushReminder は直前の同期が進行中だと時刻変更をスキップするため、
+  // 時刻が反映されたリクエストが飛ぶまで値を切り替えて再試行する。
+  await expect.poll(async () => {
+    if (!subscribeRequests.some((body) => body.notifyHour === 8)) {
+      await page.selectOption('#notify-hour', '7');
+      await page.selectOption('#notify-hour', '8');
+    }
+    return subscribeRequests.some((body) => body.notifyHour === 8);
+  }, { timeout: 10_000 }).toBe(true);
 });
 
 

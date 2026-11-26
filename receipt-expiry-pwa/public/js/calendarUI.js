@@ -1,5 +1,14 @@
 import { buildCalendar, shiftMonth } from './features2.js';
 
+function createNavButton(direction, symbol) {
+  const button = document.createElement('button');
+  button.type = 'button';
+  button.className = 'btn is-ghost calendar-nav';
+  button.dataset.calendar = direction;
+  button.textContent = symbol;
+  return button;
+}
+
 export function createCalendarUI({ ui, state }) {
   function render() {
     const days = buildCalendar(state.items, state.calendarYear, state.calendarMonth);
@@ -10,19 +19,9 @@ export function createCalendarUI({ ui, state }) {
     const header = document.createElement('div');
     header.className = 'calendar-header';
 
-    const prev = document.createElement('button');
-    prev.type = 'button';
-    prev.className = 'btn is-ghost calendar-nav';
-    prev.dataset.calendar = 'prev';
-    prev.textContent = '‹';
     const label = document.createElement('strong');
     label.textContent = `${state.calendarYear}年 ${state.calendarMonth + 1}月`;
-    const next = document.createElement('button');
-    next.type = 'button';
-    next.className = 'btn is-ghost calendar-nav';
-    next.dataset.calendar = 'next';
-    next.textContent = '›';
-    header.append(prev, label, next);
+    header.append(createNavButton('prev', '‹'), label, createNavButton('next', '›'));
 
     for (let i = 0; i < firstDay; i += 1) {
       const empty = document.createElement('div');

@@ -1,7 +1,8 @@
+import { isValidDate } from './dates.js';
+
 const ENDPOINT = '/api/analyze';
 const VALID_STORAGE = new Set(['fridge', 'freezer', 'pantry']);
 const MAX_ITEMS = 50;
-const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 
 /** /api/analyze へ画像を送信し、検証済みの解析結果を返す。 */
 export async function analyzeReceipt({ imageBase64, mimeType, clientDate, customApiKey }) {
@@ -63,9 +64,3 @@ export function normalizeAnalysis(data) {
   };
 }
 
-export function isValidDate(value) {
-  if (typeof value !== 'string' || !DATE_PATTERN.test(value)) return false;
-  const [year, month, day] = value.split('-').map(Number);
-  const date = new Date(year, month - 1, day);
-  return date.getFullYear() === year && date.getMonth() === month - 1 && date.getDate() === day;
-}

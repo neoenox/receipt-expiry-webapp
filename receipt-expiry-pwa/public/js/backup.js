@@ -1,15 +1,8 @@
+import { isValidDate } from './dates.js';
 const FORMAT = 'receipt-expiry-backup';
 const VERSION = 3;
 const VALID_STORAGE = new Set(['fridge', 'freezer', 'pantry']);
 const VALID_REASONS = new Set(['eaten', 'discarded']);
-const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
-
-function isValidDate(value) {
-  if (typeof value !== 'string' || !DATE_PATTERN.test(value)) return false;
-  const [year, month, day] = value.split('-').map(Number);
-  const date = new Date(Date.UTC(year, month - 1, day));
-  return date.getUTCFullYear() === year && date.getUTCMonth() === month - 1 && date.getUTCDate() === day;
-}
 
 function normalizeItem(raw, index) {
   const label = `在庫${index + 1}行目`;

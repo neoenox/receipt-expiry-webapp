@@ -8,8 +8,8 @@ import { normalizeFoodName, createExpiryHint, buildHintMap } from '../public/js/
 import { filterAndSortItems, annotateResultItems } from '../public/js/inventory.js';
 import { buildShoppingSuggestions, buildCalendar, shiftMonth, cropRect, shouldSendAtHour, jstDate, isSubscriptionRateLimited, retryDelayMs } from '../public/js/features2.js';
 import { analyzePayloads } from '../public/js/analysisFlow.js';
+import { isValidDate, formatDate, todayISO, defaultExpiryISO, daysUntilDate } from '../public/js/dates.js';
 import { dataUrlMime, base64FromDataUrl, nextQuality } from '../public/js/imageOptions.js';
-import { daysUntilDate } from '../public/js/dates.js';
 import { buildReminderBody } from '../notify-worker/index.js';
 
 test('queued analysis never stores an API key', () => {
@@ -138,6 +138,16 @@ test('reminder dates and messages are computed locally', () => {
   assert.match(buildReminderBody(0), /本日が賞味期限/);
   assert.match(buildReminderBody(1), /明日が賞味期限/);
   assert.match(buildReminderBody(4), /あと4日/);
+});
+
+test('date helpers validate and format calendar dates', () => {
+  assert.equal(isValidDate('2026-02-28'), true);
+  assert.equal(isValidDate('2026-02-30'), false);
+  assert.equal(isValidDate('2026-13-01'), false);
+  assert.equal(isValidDate('0026-01-01'), true);
+  assert.equal(formatDate(new Date(2026, 10, 5)), '2026-11-05');
+  assert.equal(todayISO(new Date(2026, 10, 5)), '2026-11-05');
+  assert.equal(defaultExpiryISO(new Date(2026, 10, 25)), '2026-12-02');
 });
 
 
