@@ -38,7 +38,9 @@ initConsentMode();
 
 function notifyHour() {
   try {
-    const value = Number(localStorage.getItem(NOTIFY_HOUR_KEY));
+    const raw = localStorage.getItem(NOTIFY_HOUR_KEY);
+    if (raw === null) return 6;
+    const value = Number(raw);
     return Number.isInteger(value) && value >= 0 && value <= 23 ? value : 6;
   } catch {
     return 6;
@@ -81,14 +83,28 @@ export function createSettings({ ui, state, byId, showToast, openModal, todayISO
     }
   }
 
+  // 設定フラグは有効なのにプッシュ購読が消えている場合の検知結果。
+  // 再登録の導線は持たず、表示に反映するだけにとどめる。
+  let subscriptionMissing = false;
+
   function refreshNotifyStatus() {
     if (!('Notification' in window) || !('serviceWorker' in navigator) || !('PushManager' in window)) {
-      ui.notifyStatus.textContent = 'このブラウザはプッシュ通知に対応していません。';
+      ui.notifyStatus.textContent = 'このブラウザは通知に対応していません。';
       return;
     }
-    ui.notifyStatus.textContent = isNotifyEnabled()
-      ? `通知を有効にしています（日本時間 ${String(notifyHour()).padStart(2, '0')}:00 / ${Notification.permission}）。`
-      : `通知は無効です（有効化すると日本時間 ${String(notifyHour()).padStart(2, '0')}:00 に通知します）。`;
+    const time = `日本時間 ${String(notifyHour()).padStart(2, '0')}:00`;
+    if (!isNotifyEnabled()) {
+      subscriptionMissing = false;
+      ui.notifyStatus.textContent = `リマインダ通知は無効です。有効にすると ${time} にお知らせします。`;
+      return;
+    }
+    const permission = Notification.permission === 'granted' ? 'ブラウザの許可あり'
+      : Notification.permission === 'denied' ? 'ブラウザの許可なし' : 'ブラウザの許可を確認中';
+    if (subscriptionMissing) {
+      ui.notifyStatus.textContent = `リマインダ通知は有効ですが、この端末への通知の登録が見つかりません。通知が届かない場合は、通知を一度無効にしてから有効にしてください（${time} / ${permission}）。`;
+      return;
+    }
+    ui.notifyStatus.textContent = `リマインダ通知は有効です（${time} / ${permission}）。`;
   }
 
   function refreshApiKeyStatus() {
@@ -101,7 +117,7 @@ export function createSettings({ ui, state, byId, showToast, openModal, todayISO
           ? 'APIキーを使用中です（このタブを閉じるまで保持します）。'
           : 'このセッションでAPIキーを使用中です（再読み込みで消去されます）。';
       })()
-      : '未設定の場合は、アプリ側の共通キーで解析します。';
+      : '未設定の場合は、アプリ側の共通キーで読み取ります。';
   }
   function applyAdConsent(value) {
     try { localStorage.setItem(AD_CONSENT_KEY, value); } catch { /* 保存不可でも反映する */ }
@@ -281,7 +297,7 @@ export function createSettings({ ui, state, byId, showToast, openModal, todayISO
   async function enableNotifications() {
     try {
       if (!('Notification' in window) || !('serviceWorker' in navigator) || !('PushManager' in window)) {
-        ui.notifyStatus.textContent = 'このブラウザはプッシュ通知に対応していません。';
+        ui.notifyStatus.textContent = 'このブラウザは通知に対応していません。';
         return;
       }
       const permission = await Notification.requestPermission();
@@ -332,17 +348,24 @@ export function createSettings({ ui, state, byId, showToast, openModal, todayISO
   }
 
   async function syncPushReminder() {
-    if (state.syncingPush || !isNotifyEnabled()) return;
+    if (!isNotifyEnabled()) {
+      subscriptionMissing = false;
+      refreshNotifyStatus();
+      return;
+    }
+    if (state.syncingPush) return;
     state.syncingPush = true;
     try {
       const registration = await navigator.serviceWorker.ready;
       const subscription = await registration.pushManager.getSubscription();
+      subscriptionMissing = !subscription;
+      refreshNotifyStatus();
       if (!subscription) return;
       const dates = state.items
         .map((item) => item.expiryDate)
         .filter((date) => isValidDate(date))
         .sort();
-      await fetch('/api/push/subscribe', {
+      const response = await fetch('/api/push/subscribe', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -354,6 +377,11 @@ export function createSettings({ ui, state, byId, showToast, openModal, todayISO
           notifyHour: notifyHour(),
         }),
       });
+      if (response.status === 410) {
+        // サーバー側で購読が失われた場合も、ボタンを増やさず表示だけで伝える。
+        subscriptionMissing = true;
+        refreshNotifyStatus();
+      }
     } catch {
       // 通知の同期失敗は在庫操作を止めない。
     } finally {
@@ -405,7 +433,7 @@ export function createSettings({ ui, state, byId, showToast, openModal, todayISO
       const incoming = `在庫${data.items.length}件・履歴${data.history.length}件・期限の記憶${data.hints.length}件・買い物${data.shopping.length}件`;
       if (ui.backupReplace.checked) {
         const currentItems = await getAllItems();
-        const message = `既存の在庫${currentItems.length}件・履歴・期限の記憶・買い物・未送信の解析をすべて削除し、
+        const message = `既存の在庫${currentItems.length}件・履歴・期限の記憶・買い物・保存済みのレシートをすべて削除し、
 バックアップの内容（${incoming}）で置き換えます。よろしいですか？`;
         if (!window.confirm(message)) return;
         await clearAllData();

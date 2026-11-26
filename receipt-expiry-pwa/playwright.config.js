@@ -8,6 +8,11 @@ export default defineConfig({
     // CI にシステム Chrome は入っていないため、Playwright 同梱 Chromium を使う。
     headless: true,
   },
+  // スマホ幅と PC 幅の両方で同じフローを走らせる。
+  projects: [
+    { name: 'mobile', use: { viewport: { width: 375, height: 812 } } },
+    { name: 'desktop', use: { viewport: { width: 1280, height: 720 } } },
+  ],
   webServer: {
     command: 'node oci/server.js',
     url: 'http://127.0.0.1:4173',

@@ -38,5 +38,19 @@ else
   echo "  npx wrangler@4 pages secret put GEMINI_API_KEY --project-name=${PROJECT_NAME}"
 fi
 
+# リマインダ送信専用 Worker (Cron) をデプロイする。
+"${WRANGLER[@]}" deploy --config wrangler.notify.toml
+
+if [[ -n "${VAPID_PUBLIC_KEY:-}" ]]; then
+  printf '%s' "$VAPID_PUBLIC_KEY" | "${WRANGLER[@]}" secret put VAPID_PUBLIC_KEY --config wrangler.notify.toml
+fi
+if [[ -n "${VAPID_PRIVATE_KEY:-}" ]]; then
+  printf '%s' "$VAPID_PRIVATE_KEY" | "${WRANGLER[@]}" secret put VAPID_PRIVATE_KEY --config wrangler.notify.toml
+else
+  echo "プッシュ通知を使う場合は次を実行してください:"
+  echo "  npx wrangler@4 secret put VAPID_PUBLIC_KEY --config wrangler.notify.toml"
+  echo "  npx wrangler@4 secret put VAPID_PRIVATE_KEY --config wrangler.notify.toml"
+fi
+
 echo
 echo "デプロイ完了: https://${PROJECT_NAME}.pages.dev"

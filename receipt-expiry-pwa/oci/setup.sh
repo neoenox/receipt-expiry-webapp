@@ -54,6 +54,9 @@ escape_env() {
   printf 'VAPID_PRIVATE_KEY="%s"\n' "$(escape_env "$VAPID_PRIVATE_KEY")"
   printf 'DATA_DIR=/var/lib/receipt-expiry\n'
   printf 'PUBLIC_ORIGIN="https://%s"\n' "$DOMAIN"
+  printf '# リマインダ送信は OCI 側と Cloudflare Cron 側のどちらか片方だけを有効にする。\n'
+  printf '# 両方有効だと二重送信される。Cloudflare を使う場合はこの値を 0 にする。\n'
+  printf 'REMINDERS_ENABLED=1\n'
 } > /etc/receipt-expiry.env
 mkdir -p /var/lib/receipt-expiry
 chown www-data:www-data /var/lib/receipt-expiry

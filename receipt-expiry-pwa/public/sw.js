@@ -27,7 +27,7 @@ const STATIC_ASSETS = [
 ];
 
 // HTML/JS/CSS は Network First にして、デプロイ後に古い版が固定されないようにする。
-const NETWORK_FIRST = new Set(['/', '/index.html', '/manifest.json', '/sw.js', '/css/style.css']);
+const NETWORK_FIRST = new Set(['/', '/index.html', '/manifest.json', '/css/style.css']);
 const NETWORK_FIRST_PREFIXES = ['/js/', '/css/'];
 
 function isNetworkFirst(url) {
@@ -101,6 +101,8 @@ self.addEventListener('fetch', (event) => {
   if (url.origin !== self.location.origin) return;
   // APIは常にネットワーク経由。オフライン時はアプリ側でエラー表示する。
   if (url.pathname.startsWith('/api/')) return;
+  // sw.js 自身はブラウザの更新チェックがネットワークで行うのでキャッシュしない。
+  if (url.pathname === '/sw.js') return;
 
   event.respondWith(isNetworkFirst(url) ? networkFirst(request) : cacheFirst(request));
 });

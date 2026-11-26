@@ -188,6 +188,12 @@ async function runReminders() {
 }
 
 function startReminderTimer() {
+  // デフォルトは無効。Cloudflare Cron と併用すると二重送信になるため、
+  // OCI だけで運用する場合だけ REMINDERS_ENABLED=1 で明示的に有効にする。
+  if (process.env.REMINDERS_ENABLED !== '1') {
+    console.log('[notify] reminders disabled (set REMINDERS_ENABLED=1 to enable on OCI)');
+    return;
+  }
   if (!process.env.VAPID_PUBLIC_KEY || !process.env.VAPID_PRIVATE_KEY) {
     console.log('[notify] VAPID keys not configured; reminders disabled');
     return;
