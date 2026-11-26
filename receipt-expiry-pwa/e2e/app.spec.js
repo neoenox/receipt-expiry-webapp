@@ -103,6 +103,28 @@ test('stale backup reminder appears and clears after exporting', async ({ page }
   await expect(page.locator('#backup-reminder')).toBeHidden();
 });
 
+test('multiple items can be selected and deleted at once', async ({ page }) => {
+  await page.goto('/');
+  await resetStorage(page);
+  await addItem(page, '牛乳', '2026-12-20');
+  await addItem(page, '食パン', '2026-11-25');
+  await addItem(page, '卵', '2026-12-01');
+
+  await page.click('#select-mode-btn');
+  await expect(page.locator('#bulk-actions')).toBeVisible();
+  await expect(page.locator('.item-select')).toHaveCount(3);
+
+  await page.locator('.item-card').nth(0).click();
+  await page.locator('.item-card').nth(2).click();
+  await expect(page.locator('.item-select input:checked')).toHaveCount(2);
+
+  page.once('dialog', (dialog) => void dialog.accept());
+  await page.click('#bulk-delete-btn');
+  await expect(page.locator('#item-count')).toHaveText('1件');
+  await expect(page.locator('.item-name')).toHaveText('卵');
+  await expect(page.locator('#bulk-actions')).toBeHidden();
+});
+
 test('offline analysis is queued and retried after reconnection', async ({ page }) => {
   await page.goto('/');
   await resetStorage(page);
@@ -115,12 +137,12 @@ test('offline analysis is queued and retried after reconnection', async ({ page 
 
   await expect(page.locator('#preview-modal')).toBeVisible();
   await page.click('#preview-confirm');
-  await expect(page.locator('#toast')).toContainText('オフラインキューに保存しました');
+  await expect(page.locator('#toast')).toContainText('接続が戻ったら読み取ります');
 
   await page.click('#settings-btn');
 
   await page.click('[data-settings-tab="notify"]');
-  await expect(page.locator('#queue-status')).toContainText('未送信の解析: 1件');
+  await expect(page.locator('#queue-status')).toContainText('まだ読み取っていないレシート: 1件');
   await expect(page.locator('.queue-row')).toHaveCount(1);
 
   await page.unroute('**/api/analyze');
@@ -138,7 +160,7 @@ test('offline analysis is queued and retried after reconnection', async ({ page 
 
   await page.keyboard.press('Escape');
 
-  await expect(page.locator('#queue-status')).toContainText('未送信の解析はありません');
+  await expect(page.locator('#queue-status')).toContainText('読み取っていないレシートはありません');
 });
 
 
@@ -173,7 +195,7 @@ test('BYOK key is validated before it is stored', async ({ page }) => {
   await page.reload();
   await page.click('#settings-btn');
   await page.click('[data-settings-tab="data"]');
-  await expect(page.locator('#api-key-status')).toContainText('共通キーで解析します');
+  await expect(page.locator('#api-key-status')).toContainText('共通キーで読み取ります');
 });
 
 test('BYOK key can be kept for the tab when requested', async ({ page }) => {
@@ -235,16 +257,80 @@ test('notification opt-in succeeds with a subscribed push manager', async ({ pag
   await page.click('#settings-btn');
   await page.click('[data-settings-tab="notify"]');
   await page.click('#notify-enable-btn');
-  await expect(page.locator('#notify-status')).toContainText('通知を有効にしています');
+  await expect(page.locator('#notify-status')).toContainText('リマインダ通知は有効です');
   await expect.poll(() => subscribeRequests.length).toBeGreaterThan(0);
   expect(subscribeRequests[0].subscription.endpoint).toBe('https://example.test/e2e');
   expect(subscribeRequests[0].expiryDates).toContain('2026-12-20');
 
   await page.selectOption('#notify-hour', '8');
   await expect(page.locator('#notify-status')).toContainText('08:00');
-  await expect.poll(() => subscribeRequests.at(-1)?.notifyHour).toBe(8);
+  // syncPushReminder は在庫更新などからも呼ばれるため、末尾が時刻変更のリクエストとは限らない。
+  // 時刻変更が反映されたリクエストが1度でも飛べばよい。
+  await expect.poll(() => subscribeRequests.some((body) => body.notifyHour === 8)).toBe(true);
 });
 
+
+test('notify status warns when a push subscription is gone (410 from subscribe API)', async ({ page }) => {
+  await page.addInitScript(() => {
+    Object.defineProperty(Notification, 'permission', { get: () => 'granted' });
+    Notification.requestPermission = async () => 'granted';
+    const subscription = {
+      endpoint: 'https://example.test/e2e-gone',
+      keys: { p256dh: 'AAA', auth: 'BBB' },
+      toJSON() { return { endpoint: this.endpoint, keys: this.keys }; },
+      unsubscribe: async () => true,
+    };
+    PushManager.prototype.getSubscription = async () => subscription;
+  });
+  await page.goto('/');
+  await resetStorage(page);
+
+  await page.route('**/api/push/subscribe', (route) => route.fulfill({
+    status: 410,
+    contentType: 'application/json',
+    body: JSON.stringify({ error: { code: 'SUBSCRIPTION_GONE' } }),
+  }));
+
+  await page.click('#settings-btn');
+  await page.click('[data-settings-tab="notify"]');
+  await page.click('#notify-enable-btn');
+  await expect(page.locator('#notify-status')).toContainText('通知を一度無効にしてから有効にしてください');
+});
+
+test('notify status warns when getSubscription returns null after enabling', async ({ page }) => {
+  await page.addInitScript(() => {
+    Object.defineProperty(Notification, 'permission', { get: () => 'granted' });
+    Notification.requestPermission = async () => 'granted';
+    const subscription = {
+      endpoint: 'https://example.test/e2e-null',
+      keys: { p256dh: 'AAA', auth: 'BBB' },
+      toJSON() { return { endpoint: this.endpoint, keys: this.keys }; },
+      unsubscribe: async () => true,
+    };
+    window.__subscriptionExists = true;
+    PushManager.prototype.getSubscription = async () => (window.__subscriptionExists ? subscription : null);
+    const originalUnsubscribe = subscription.unsubscribe.bind(subscription);
+    subscription.unsubscribe = async () => {
+      window.__subscriptionExists = false;
+      return originalUnsubscribe();
+    };
+  });
+  await page.goto('/');
+  await resetStorage(page);
+
+  await page.click('#settings-btn');
+  await page.click('[data-settings-tab="notify"]');
+  await page.click('#notify-enable-btn');
+  await expect(page.locator('#notify-status')).toContainText('リマインダ通知は有効です');
+
+  // ブラウザ側の購読が消えた状態を再現し、設定を開き直す。
+  // addInitScript はリロード時に再実行されるため、フラグはページ側のグローバルに置いて維持する。
+  await page.reload();
+  await page.evaluate(() => { window.__subscriptionExists = false; });
+  await page.click('#settings-btn');
+  await page.click('[data-settings-tab="notify"]');
+  await expect(page.locator('#notify-status')).toContainText('通知を一度無効にしてから有効にしてください');
+});
 
 test('multiple receipts are previewed and merged into one result', async ({ page }) => {
   await page.goto('/');

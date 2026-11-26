@@ -1,0 +1,20 @@
+# リマインダ送信専用 Worker。Pages 本体 (wrangler.toml) とは別に wrangler deploy する。
+name = "receipt-expiry-notify"
+main = "functions/notify.js"
+compatibility_date = "2026-11-22"
+
+# Cron は UTC。毎分実行し、reminder.js 側の notifyHour / 通知済み判定で実際の送信时刻を制御する。
+[triggers]
+crons = ["* * * * *"]
+
+[[kv_namespaces]]
+binding = "PUSH_KV"
+id = "144d3da77b74483f92a3397b0bf5647e"
+
+# VAPID 公開鍵 / 秘密鍵は secret として登録する (wrangler secret put)。
+# 公開鍵は Pages 側の /api/push/config からも参照するため、両方に設定すること。
+[env.production]
+
+[[env.production.kv_namespaces]]
+binding = "PUSH_KV"
+id = "144d3da77b74483f92a3397b0bf5647e"

@@ -1,5 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import { createQueuedAnalysis, nextAttempt, shouldDiscard, MAX_QUEUE_ATTEMPTS } from '../public/js/queue.js';
 import { createConsumption, summarizeHistory } from '../public/js/history.js';
 import { normalizeFoodName, createExpiryHint, buildHintMap } from '../public/js/learning.js';
@@ -17,6 +19,21 @@ test('queued analysis never stores an API key', () => {
   assert.equal('customApiKey' in job, false);
   assert.equal('apiKey' in job, false);
   assert.ok(job.id);
+});
+
+test('queued analysis preserves PNG and WebP MIME types and defaults other types to JPEG', () => {
+  const imageBase64 = 'aGVsbG8=';
+  const webp = createQueuedAnalysis({ imageBase64, mimeType: 'image/webp' });
+  assert.equal(webp.mimeType, 'image/webp');
+
+  const png = createQueuedAnalysis({ imageBase64, mimeType: 'image/png' });
+  assert.equal(png.mimeType, 'image/png');
+
+  const jpeg = createQueuedAnalysis({ imageBase64, mimeType: 'image/jpeg' });
+  assert.equal(jpeg.mimeType, 'image/jpeg');
+
+  const unknown = createQueuedAnalysis({ imageBase64, mimeType: 'image/gif' });
+  assert.equal(unknown.mimeType, 'image/jpeg');
 });
 
 test('rate-limited payloads carry Retry-After so the queue can wait', async () => {
@@ -272,5 +289,22 @@ test('analysis flow reports the exact payload that failed so it can be requeued'
   assert.deepEqual(errors, ['解析できません']);
   assert.deepEqual(result.results.map((entry) => entry.ok), [true, false]);
   assert.deepEqual(result.results[1].payload, { imageBase64: 'bad' });
-  assert.deepEqual(result.failed ?? result.results.filter((entry) => !entry.ok).map((entry) => entry.payload), [{ imageBase64: 'bad' }]);
+  // result.failed の有無にかかわらず、失敗ペイロードが results に残ることを検証する。
+  assert.deepEqual(result.results.filter((entry) => !entry.ok).map((entry) => entry.payload), [{ imageBase64: 'bad' }]);
+  if (result.failed !== undefined) {
+    assert.deepEqual(result.failed, [{ imageBase64: 'bad' }]);
+  }
+});
+
+test('service worker excludes /sw.js from network-first handling', () => {
+  const swPath = fileURLToPath(new URL('../public/sw.js', import.meta.url));
+  const source = fs.readFileSync(swPath, 'utf8');
+  // /sw.js は network-first の集合/前方一致に含めず、fetch ハンドラで早期 return する。
+  assert.match(source, /url\.pathname === '\/sw\.js'\)\s*return;/);
+  const networkFirstLine = source.split('\n').find((line) => line.includes('const NETWORK_FIRST ='));
+  assert.ok(networkFirstLine, 'NETWORK_FIRST の定義があること');
+  assert.equal(networkFirstLine.includes('/sw.js'), false);
+  const prefixesLine = source.split('\n').find((line) => line.includes('const NETWORK_FIRST_PREFIXES ='));
+  assert.ok(prefixesLine, 'NETWORK_FIRST_PREFIXES の定義があること');
+  assert.equal(prefixesLine.includes('/sw.js'), false);
 });

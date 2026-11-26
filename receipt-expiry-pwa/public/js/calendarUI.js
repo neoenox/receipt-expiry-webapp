@@ -12,12 +12,14 @@ export function createCalendarUI({ ui, state }) {
 
     const prev = document.createElement('button');
     prev.type = 'button';
+    prev.className = 'btn is-ghost calendar-nav';
     prev.dataset.calendar = 'prev';
     prev.textContent = '‹';
     const label = document.createElement('strong');
     label.textContent = `${state.calendarYear}年 ${state.calendarMonth + 1}月`;
     const next = document.createElement('button');
     next.type = 'button';
+    next.className = 'btn is-ghost calendar-nav';
     next.dataset.calendar = 'next';
     next.textContent = '›';
     header.append(prev, label, next);

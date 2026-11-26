@@ -85,6 +85,9 @@ export async function onRequestPost({ request, env }) {
             && key.name !== SUB_COUNT_KEY).length;
           cursor = page.list_complete ? undefined : page.cursor;
         } while (cursor);
+        // 走査結果を永続化し、total キーが消えた状態での毎回のフル走査を防ぐ。
+        // TTL は付けない (付けるとまた期限切れで走査が復活する)。
+        await kv.put(SUB_COUNT_KEY, String(total));
       }
       const count = Number(rateRaw || 0) + 1;
       if (isSubscriptionRateLimited(count, total)) {

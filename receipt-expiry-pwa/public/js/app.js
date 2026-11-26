@@ -20,6 +20,10 @@ const ui = {
   tabs: byId('storage-tabs'),
   list: byId('item-list'),
   itemCount: byId('item-count'),
+  selectModeBtn: byId('select-mode-btn'),
+  bulkActions: byId('bulk-actions'),
+  bulkDeleteBtn: byId('bulk-delete-btn'),
+  bulkCancelBtn: byId('bulk-cancel-btn'),
 
   shoppingModal: byId('shopping-modal'),
   shoppingSuggestions: byId('shopping-suggestions'),
@@ -80,6 +84,7 @@ const ui = {
 const state = {
   items: [],
   filter: 'all',
+  selectMode: false,
 
   search: '',
   sort: 'expiry',
@@ -176,6 +181,9 @@ function openModal(element) {
   state.focusBeforeModal = document.activeElement;
   state.modalStack.push(element);
   element.classList.remove('hidden');
+  // 直前の操作のトーストがモーダルに重ならないようにする。
+  clearTimeout(state.toastTimer);
+  ui.toast.classList.add('hidden');
   element.querySelector('button, input, select, textarea')?.focus();
 }
 
@@ -222,6 +230,9 @@ function renderList() {
   ui.list.replaceChildren();
   for (const item of visible) {
     const card = ui.itemTemplate.content.firstElementChild.cloneNode(true);
+    card.dataset.id = item.id;
+    card.classList.toggle('is-select-mode', state.selectMode);
+    card.querySelector('.item-select').classList.toggle('hidden', !state.selectMode);
     card.querySelector('.item-name').textContent = item.name;
     card.querySelector('.item-storage').textContent = STORAGE_LABELS[item.storage] || '';
     card.querySelector('.item-quantity').textContent = item.quantity || '';
@@ -231,10 +242,13 @@ function renderList() {
     if (Number.isNaN(days)) {
       badge.className = 'badge badge-warning';
       badge.textContent = '期限不明';
+      card.dataset.urgency = 'unknown';
     } else {
       const status = statusFor(days);
       badge.className = `badge ${status.className}`;
       badge.textContent = status.label;
+      card.dataset.urgency = status.className === 'badge-expired' ? 'expired'
+        : (status.className === 'badge-warning' ? 'soon' : 'safe');
     }
 
     const expiry = card.querySelector('.item-expiry');
@@ -252,6 +266,36 @@ function renderList() {
     ui.emptyDetail.textContent = noItems
       ? 'レシートを撮影するか、＋ボタンから食材を追加してください。'
       : '別の保存場所のタブを選択してください。';
+  }
+}
+
+function setSelectMode(enabled) {
+  state.selectMode = enabled;
+  ui.selectModeBtn.classList.toggle('hidden', enabled);
+  ui.bulkActions.classList.toggle('hidden', !enabled);
+  renderList();
+}
+
+function selectedItemIds() {
+  return Array.from(ui.list.querySelectorAll('.item-select input:checked'))
+    .map((checkbox) => checkbox.closest('.item-card')?.dataset.id)
+    .filter(Boolean);
+}
+
+async function deleteSelectedItems() {
+  const ids = selectedItemIds();
+  if (!ids.length) {
+    showToast('削除する食材を選択してください。');
+    return;
+  }
+  if (!window.confirm(`選択した${ids.length}件の食材を削除します。よろしいですか？`)) return;
+  try {
+    for (const id of ids) await deleteItem(id);
+    setSelectMode(false);
+    await refreshItems();
+    showToast(`${ids.length}件の食材を削除しました。`);
+  } catch (error) {
+    showToast(error.message || '削除に失敗しました。');
   }
 }
 
@@ -299,7 +343,7 @@ async function renderPreview() {
     if (source?.close) source.close();
   }
   ui.previewProgress.textContent = `${state.previewIndex + 1}/${state.previewFiles.length}`;
-  byId('preview-confirm').textContent = state.previewIndex + 1 < state.previewFiles.length ? '次の画像へ' : '解析する';
+  byId('preview-confirm').textContent = state.previewIndex + 1 < state.previewFiles.length ? '次の画像へ' : '読み取る';
 }
 
 function loadPreviewImage(file) {
@@ -361,7 +405,7 @@ async function queueFailedPayloads(failedPayloads, message) {
 
 async function submitProcessed(payloads) {
   if (!navigator.onLine) {
-    await queueFailedPayloads(payloads, `${payloads.length}件をオフラインキューに保存しました。`);
+    await queueFailedPayloads(payloads, `${payloads.length}件を保存しました。接続が戻ったら読み取ります。`);
     return;
   }
   const summary = await submitAnalyses(payloads);
@@ -369,7 +413,7 @@ async function submitProcessed(payloads) {
     const wait = summary.failed.some((entry) => entry.retryAfter)
       ? 'レート制限が解除された後に再試行します。'
       : '接続復帰後に再試行します。';
-    await queueFailedPayloads(summary.failed, `${summary.failed.length}件を解析キューに保存しました。${wait}`);
+    await queueFailedPayloads(summary.failed, `${summary.failed.length}件を後で読み取るリストに保存しました。${wait}`);
   }
 }
 
@@ -414,7 +458,7 @@ async function submitAnalyses(payloads) {
 async function submitAnalysis(payload) {
   const { failed } = await submitAnalyses([payload]);
   if (failed.length) {
-    const error = new Error('解析に失敗しました。');
+    const error = new Error('レシートを読み取れませんでした。');
     error.retryAfter = failed[0].retryAfter || 0;
     throw error;
   }
@@ -766,6 +810,17 @@ function wireEvents() {
     } else if (removeId) {
       void deleteShoppingItem(removeId).then(refreshShopping);
     }
+  });
+
+  ui.selectModeBtn.addEventListener('click', () => setSelectMode(true));
+  ui.bulkCancelBtn.addEventListener('click', () => setSelectMode(false));
+  ui.bulkDeleteBtn.addEventListener('click', () => void deleteSelectedItems());
+  ui.list.addEventListener('click', (event) => {
+    if (!state.selectMode) return;
+    const card = event.target.closest('.item-card');
+    const checkbox = card?.querySelector('.item-select input');
+    if (!checkbox || event.target === checkbox) return;
+    checkbox.checked = !checkbox.checked;
   });
 
   ui.viewToggle.addEventListener('click', calendarUI.toggle);
