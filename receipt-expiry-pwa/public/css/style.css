@@ -679,6 +679,17 @@ label.checkbox-field input[type='checkbox'] {
   .overlay { align-items: center; padding: 20px; }
   .sheet, .sheet-wide { border-radius: 20px; padding-bottom: 24px; }
   .loading-box { margin-bottom: 0; }
+  /* 設定モーダルは PC 幅で余白を詰め、閉じるボタンを初期表示で見せる。 */
+  .sheet-wide { padding-top: 16px; padding-bottom: 12px; }
+  .sheet-wide h2 { margin-bottom: 4px; }
+  .settings-tabs { margin-bottom: 4px; }
+  .settings-section { margin: 6px 0; padding: 10px; }
+  .sheet-wide .field { margin-bottom: 8px; }
+  .sheet-wide .hint { margin-bottom: 8px; }
+  .sheet-wide .sheet-actions { margin-top: 12px; }
+  .guide { margin-bottom: 8px; }
+  .guide li { margin-bottom: 4px; }
+  .guide-details { margin-top: 8px; padding: 8px 12px; }
 }
 
 /* PC ではスマホ幅の枠を広げる。600px 未満の見た目は変えない。 */
