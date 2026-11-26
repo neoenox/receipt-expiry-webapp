@@ -4,7 +4,8 @@ import { onRequestPost } from '../functions/api/analyze.js';
 import { onRequestPost as onMetricsPost } from '../functions/api/metrics.js';
 import { onRequestPost as onValidateKeyPost } from '../functions/api/validate-key.js';
 import { onRequestPost as onSubscribePost } from '../functions/api/push/subscribe.js';
-import { normalizeAnalysis, isValidDate } from '../public/js/apiClient.js';
+import { normalizeAnalysis } from '../public/js/apiClient.js';
+import { isValidDate } from '../public/js/dates.js';
 
 const ORIGIN = 'https://receipt-expiry-pwa.pages.dev';
 const VALID_IMAGE = 'aGVsbG8=';

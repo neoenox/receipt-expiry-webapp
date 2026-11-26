@@ -1,6 +1,7 @@
 import { initDB, addItemsBulk, getAllItemsSorted, updateItem, deleteItem, enqueueAnalysis, addConsumption, listConsumption, saveExpiryHint, listExpiryHints, addShoppingItems, listShoppingItems, deleteShoppingItem } from './db.js';
 import { processReceiptImage, renderPreviewCanvas } from './imageProcessor.js';
-import { analyzeReceipt, isValidDate } from './apiClient.js';
+import { analyzeReceipt } from './apiClient.js';
+import { isValidDate, todayISO, defaultExpiryISO, daysUntilDate } from './dates.js';
 import { createQueuedAnalysis } from './queue.js';
 import { createConsumption, summarizeHistory } from './history.js';
 import { createExpiryHint, buildHintMap, normalizeFoodName } from './learning.js';
@@ -133,39 +134,6 @@ const settings = createSettings({
   refreshQueueStatus: () => queueUI.refreshQueueStatus(),
 });
 
-/* ---------- 日付・ステータス ---------- */
-
-function pad(value) {
-  return String(value).padStart(2, '0');
-}
-
-function formatDate(date) {
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
-}
-
-function todayISO() {
-  return formatDate(new Date());
-}
-
-function defaultExpiryISO() {
-  const date = new Date();
-  date.setDate(date.getDate() + 7);
-  return formatDate(date);
-}
-
-function parseLocalDate(value) {
-  if (!isValidDate(value)) return null;
-  const [year, month, day] = value.split('-').map(Number);
-  return new Date(year, month - 1, day);
-}
-
-function calcRemainingDays(expiryDateStr) {
-  const expiry = parseLocalDate(expiryDateStr);
-  if (!expiry) return NaN;
-  const now = new Date();
-  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  return Math.ceil((expiry.getTime() - today.getTime()) / 86400000);
-}
 
 function statusFor(days) {
   if (days < 0) return { className: 'badge-expired', label: `期限切れ (${Math.abs(days)}日超過)` };
@@ -237,9 +205,9 @@ function renderList() {
     card.querySelector('.item-storage').textContent = STORAGE_LABELS[item.storage] || '';
     card.querySelector('.item-quantity').textContent = item.quantity || '';
 
-    const days = calcRemainingDays(item.expiryDate);
+    const days = daysUntilDate(item.expiryDate);
     const badge = card.querySelector('.badge');
-    if (Number.isNaN(days)) {
+    if (days === null) {
       badge.className = 'badge badge-warning';
       badge.textContent = '期限不明';
       card.dataset.urgency = 'unknown';

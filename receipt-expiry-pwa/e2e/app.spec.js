@@ -1,23 +1,8 @@
 import { test, expect } from '@playwright/test';
 import { fileURLToPath } from 'node:url';
+import { resetStorage } from './helpers.js';
 
 const ICON_PATH = fileURLToPath(new URL('../public/icons/icon-192.png', import.meta.url));
-
-async function resetStorage(page) {
-  await page.evaluate(async () => {
-    await new Promise((resolve) => {
-      const request = indexedDB.deleteDatabase('ReceiptExpiryDB');
-      request.onsuccess = resolve;
-      request.onerror = resolve;
-      request.onblocked = resolve;
-    });
-    localStorage.clear();
-    sessionStorage.clear();
-    localStorage.setItem('receipt-expiry-ad-consent', 'granted');
-  });
-  await page.reload();
-  await expect(page.locator('#item-count')).toHaveText('0件');
-}
 
 async function addItem(page, name, expiry) {
   await page.click('#add-btn');

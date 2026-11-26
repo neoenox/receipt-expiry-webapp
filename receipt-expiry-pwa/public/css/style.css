@@ -12,6 +12,7 @@
   --warning: #b45309;
   --warning-soft: #fffbeb;
   --safe: #047857;
+  --action-bar-height: 84px;
   --safe-soft: #ecfdf5;
   --shadow: 0 6px 22px rgba(15, 23, 42, .08);
   --surface-alt: #f8faf9;
@@ -644,8 +645,8 @@ label.checkbox-field input[type='checkbox'] {
   z-index: 50;
   left: 12px;
   right: 12px;
-  /* 固定アクションバー（84px）と重ならないようにその上に配置する */
-  bottom: calc(96px + env(safe-area-inset-bottom));
+  /* 固定アクションバーの分だけ上に配置して操作を遮らないようにする */
+  bottom: calc(12px + var(--action-bar-height) + env(safe-area-inset-bottom));
   max-width: 560px;
   margin: 0 auto;
   padding: 14px;
