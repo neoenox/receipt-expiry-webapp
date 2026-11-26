@@ -1,4 +1,5 @@
 import { clientIp, json, readJsonWithLimit, requireSameOriginJson } from '../../shared/http.js';
+import { jstDate } from '../../../public/js/features2.js';
 
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 const RATE_WINDOW_SECONDS = 3600;
@@ -19,6 +20,32 @@ function validEndpoint(endpoint) {
   } catch {
     return false;
   }
+}
+
+function validDates(value) {
+  return Array.isArray(value)
+    ? [...new Set(value.filter((date) => DATE_PATTERN.test(date || '')))].sort().slice(0, 20)
+    : [];
+}
+
+function validNotifiedDates(value) {
+  return Array.isArray(value)
+    ? [...new Set(value.filter((date) => DATE_PATTERN.test(date || '')))].sort().slice(-20)
+    : [];
+}
+
+function parseStoredEntry(raw) {
+  if (!raw) return {};
+  try {
+    const entry = JSON.parse(raw);
+    return entry && typeof entry === 'object' ? entry : {};
+  } catch {
+    return {};
+  }
+}
+
+function daysUntilDate(date, today) {
+  return date ? Math.round((Date.parse(date) - Date.parse(today)) / 86_400_000) : null;
 }
 
 export async function onRequestPost({ request, env }) {
@@ -72,26 +99,47 @@ export async function onRequestPost({ request, env }) {
     }
   }
 
-  const nextExpiry = DATE_PATTERN.test(body.nextExpiry || '') ? body.nextExpiry : null;
-  const expiryDates = Array.isArray(body.expiryDates)
-    ? body.expiryDates.filter((date) => DATE_PATTERN.test(date || '')).slice(0, 20)
-    : [];
+  const requestedExpiry = DATE_PATTERN.test(body.nextExpiry || '') ? body.nextExpiry : null;
+  const expiryDates = validDates(body.expiryDates);
   const daysUntil = Number.isFinite(body.daysUntil) ? Math.max(-365, Math.min(365, Math.round(body.daysUntil))) : null;
   const notifyHour = Number.isFinite(body.notifyHour) ? Math.max(0, Math.min(23, Math.round(body.notifyHour))) : 6;
-  const entry = {
-    subscription: { endpoint, keys: { p256dh, auth } },
-    nextExpiry,
-    expiryDates,
-    daysUntil,
-    notifyHour,
-    updatedAt: Date.now(),
-  };
   if (!kv) return json({ ok: true });
 
   try {
-    const existing = await kv.get(endpoint);
+    const existingRaw = await kv.get(endpoint);
+    const previous = parseStoredEntry(existingRaw);
+    const today = jstDate(new Date());
+    const notified = new Set(validNotifiedDates(previous.notifiedExpiryDates));
+    const previousExpiryDates = validDates(previous.expiryDates);
+
+    // Legacy records stored notifiedAt but not the expiry date. When the
+    // client re-registers an expiry that was already in the old date list
+    // after the worker advanced/cleared nextExpiry, retain that notification.
+    const legacyNotified = Boolean(
+      previous.notifiedAt
+      && requestedExpiry
+      && previous.nextExpiry !== requestedExpiry
+      && previousExpiryDates.includes(requestedExpiry)
+    );
+    if (legacyNotified) notified.add(requestedExpiry);
+
+    const dates = validDates([...expiryDates, requestedExpiry].filter(Boolean));
+    const nextExpiry = requestedExpiry && !notified.has(requestedExpiry)
+      ? requestedExpiry
+      : dates.filter((date) => date >= today && !notified.has(date)).sort()[0] || null;
+    const entry = {
+      subscription: { endpoint, keys: { p256dh, auth } },
+      nextExpiry,
+      expiryDates: dates,
+      daysUntil: nextExpiry ? daysUntilDate(nextExpiry, today) : null,
+      notifyHour,
+      notifiedExpiryDates: [...notified].sort().slice(-20),
+      ...(previous.notifiedAt ? { notifiedAt: previous.notifiedAt } : {}),
+      updatedAt: Date.now(),
+    };
+
     await kv.put(endpoint, JSON.stringify(entry));
-    if (!existing) {
+    if (!existingRaw) {
       const total = Number(await kv.get(SUB_COUNT_KEY) || 0) + 1;
       await kv.put(SUB_COUNT_KEY, String(total));
     }
