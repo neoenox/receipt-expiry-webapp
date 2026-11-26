@@ -5,6 +5,28 @@ const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 const REMINDER_BODY = 'まもなく賞味期限の食材があります。アプリを開いて確認してください。';
 const REMINDER_SUFFIX = 'アプリを開いて確認してください。';
 
+function validExpiryDates(entry) {
+  return Array.isArray(entry?.expiryDates)
+    ? [...new Set(entry.expiryDates.filter((date) => DATE_PATTERN.test(date || '')))].sort()
+    : [];
+}
+
+function notifiedExpirySet(entry) {
+  return new Set(
+    Array.isArray(entry?.notifiedExpiryDates)
+      ? entry.notifiedExpiryDates.filter((date) => DATE_PATTERN.test(date || ''))
+      : []
+  );
+}
+
+function daysUntilDate(date, today) {
+  return date ? Math.round((Date.parse(date) - Date.parse(today)) / 86_400_000) : null;
+}
+
+function nextUnnotifiedExpiry(dates, today, notified) {
+  return dates.filter((date) => date > today && !notified.has(date)).sort()[0] || null;
+}
+
 export function buildReminderBody(daysUntil) {
   if (!Number.isFinite(daysUntil)) return REMINDER_BODY;
   const days = Math.round(daysUntil);
@@ -36,7 +58,23 @@ export async function sendReminders({ kv, sendNotification, vapid, now = new Dat
       } catch {
         continue;
       }
-      if (!entry?.subscription?.endpoint || !entry.nextExpiry || entry.nextExpiry > today) continue;
+      if (!entry?.subscription?.endpoint || !entry.nextExpiry) continue;
+
+      const expiryDates = validExpiryDates(entry);
+      const notified = notifiedExpirySet(entry);
+      // A stale client can re-register an expiry that the worker already sent.
+      // Advance it without sending again, preserving the per-expiry ledger.
+      if (notified.has(entry.nextExpiry)) {
+        const next = nextUnnotifiedExpiry(expiryDates, today, notified);
+        await kv.put(name, JSON.stringify({
+          ...entry,
+          nextExpiry: next,
+          daysUntil: daysUntilDate(next, today),
+        }));
+        continue;
+      }
+      if (entry.nextExpiry > today) continue;
+
       const notifiedDate = entry.notifiedAt ? jstDate(new Date(entry.notifiedAt)) : null;
       if (!shouldSendAtHour(entry, now, notifiedDate)) continue;
 
@@ -45,16 +83,13 @@ export async function sendReminders({ kv, sendNotification, vapid, now = new Dat
           entry.subscription,
           JSON.stringify({ title: REMINDER_TITLE, body: buildReminderBody(entry.daysUntil), url: '/' })
         );
-        // 次の期限へ進める。アプリを開かなくても残りの期限を通知できる。
-        const upcoming = (Array.isArray(entry.expiryDates) ? entry.expiryDates : [])
-          .filter((date) => DATE_PATTERN.test(date || '') && date > today)
-          .sort();
-        const next = upcoming[0] || null;
-        const nextDaysUntil = next ? Math.round((Date.parse(next) - Date.parse(today)) / 86_400_000) : null;
+        notified.add(entry.nextExpiry);
+        const next = nextUnnotifiedExpiry(expiryDates, today, notified);
         await kv.put(name, JSON.stringify({
           ...entry,
           nextExpiry: next,
-          daysUntil: nextDaysUntil,
+          daysUntil: daysUntilDate(next, today),
+          notifiedExpiryDates: [...notified].sort().slice(-20),
           notifiedAt: Date.now(),
         }));
         sent += 1;
