@@ -46,6 +46,9 @@ flowchart LR
 
 - 日付検証・書式・残日数: `public/js/dates.js`（Round 0 前に集約済み）
 - E2E の初期化: `e2e/helpers.js`（Round 0 前に集約済み）
+- 通知時刻判定: `functions/shared/schedule.js`（ADR-003）
+- レート制限ポリシー: `functions/shared/limits.js`（ADR-004）
+- 強制: `tests/architecture.test.js` がレイヤー逆転と上記2つの二重定義を `npm test` で検出（ADR-005）
 
 ## スキャンで更新するセクション
 

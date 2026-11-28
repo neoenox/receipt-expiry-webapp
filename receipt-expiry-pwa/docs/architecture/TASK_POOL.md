@@ -6,9 +6,8 @@
 
 | ID | タスク | 価値 | リスク | 状態 |
 |---|---|---|---|---|
-| T-014 | アーキテクチャ規範の CI 強制（レイヤー逆転・二重定義の検出） | 高 | 低 | next |
+| T-013 | 未配線の `notify-worker/`（同名 Worker・re-export）を削除し、参照を `functions/notify.js` に統一 | 中 | 低 | next |
 | T-011 | 保存場所・理由・テーマ・日付パターン・件数上限を browser/server 共通定数へ集約し、E2E/unit も参照 | 高 | 中 | queued |
-| T-013 | 未配線の `notify-worker/`（同名 Worker・re-export）を削除し、参照を `functions/notify.js` に統一 | 中 | 低 | queued |
 | T-015 | 仕様書 / README と実装のドリフトを解消 | 中 | 低 | queued |
 | T-016 | unit の KV fake / Request fixture、E2E の通知 mock を共通化 | 中 | 低 | queued |
 | T-017 | ID 生成（4実装）、画像読込（2実装）、キュー試行回数リテラルを集約 | 中 | 低 | queued |
@@ -23,6 +22,7 @@
 | T-002 | E2E 初期化ヘルパーの共通化 | `e2e/helpers.js`（main にマージ済み） |
 | T-010 | 通知時刻判定の単一化とレイヤー逆転の解消 | Round 1。unit 58 pass / 実経路テスト / レビュー済み |
 | T-012 | レート制限ポリシーの単一化 | Round 2。unit 61 pass / Wrangler dry-run / DO 境界テスト / レビュー済み |
+| T-014 | アーキテクチャ規範の CI 強制 | Round 3。unit 64 pass / 違反検出の実証 / レビュー指摘4件を反映 |
 
 ## 確認待ち（blocked）
 
@@ -34,5 +34,6 @@
 ## ログ
 
 - 2026-11-28: Round 0 完了。ベースライン unit 57 / E2E 46 成功。
-- 2026-11-28: Round 1 完了。unit 58 pass。既知 flake 1件（変更前ベースラインでも再現）。実経路テスト追加。
-- 2026-11-28: Round 2 完了。unit 61 pass、Wrangler dry-run 成功。レビュー指摘（TTL と日次境界）をテストで補強。
+- 2026-11-28: Round 1 完了。既知 flake は変更前ベースラインでも再現。実経路テスト追加。
+- 2026-11-28: Round 2 完了。DO が共有ポリシーを使う境界テストを追加。
+- 2026-11-28: Round 3 完了。静的規範検査を追加し、意図的違反で検出を実証。レビュー指摘を反映。
