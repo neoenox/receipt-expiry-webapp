@@ -1,16 +1,11 @@
 import { clientIp, json, readJsonWithLimit, requireSameOriginJson } from '../../shared/http.js';
-import { jstDate } from '../../../public/js/features2.js';
+import { SUBSCRIPTION_RATE, isSubscriptionRateLimited } from '../../shared/limits.js';
+import { jstDate } from '../../shared/schedule.js';
 
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
-const RATE_WINDOW_SECONDS = 3600;
-const MAX_PER_HOUR = 10;
-const MAX_TOTAL = 1000;
 const MAX_BODY_BYTES = 4096;
 const SUB_COUNT_KEY = 'subcount:total';
 
-function isSubscriptionRateLimited(count, total) {
-  return (Number(count) || 0) > MAX_PER_HOUR || (Number(total) || 0) >= MAX_TOTAL;
-}
 
 function validEndpoint(endpoint) {
   if (!endpoint || endpoint.length > 1000) return false;
@@ -93,7 +88,7 @@ export async function onRequestPost({ request, env }) {
       if (isSubscriptionRateLimited(count, total)) {
         return json({ error: { code: 'RATE_LIMIT_EXCEEDED' } }, 429);
       }
-      await kv.put(rateKey, String(count), { expirationTtl: RATE_WINDOW_SECONDS });
+      await kv.put(rateKey, String(count), { expirationTtl: SUBSCRIPTION_RATE.windowSeconds });
     } catch {
       return json({ error: { code: 'STORE_UNAVAILABLE' } }, 503);
     }

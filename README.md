@@ -55,12 +55,12 @@ Cloudflare では `wrangler.toml` の `RATE_LIMIT_KV` バインディング（KV
 - **期限通知:** 設定で有効にすると、最も近い賞味期限の日付だけをサーバーへ登録し、Cron Worker が Web Push を送信（食材名・数量は送信しない）
 - **JSONバックアップ:** 設定画面から在庫をエクスポート/インポート
 
-通知の仕組み: `notify-worker/` に Cron Worker（`web-push`、秘密鍵は Cloudflare Secret）、Pages Functions に `/api/push/*`、KV バインディングは `PUSH_KV` です。
+通知の仕組み: `functions/notify.js`（`wrangler.notify.toml` の Cron Worker、秘密鍵は Cloudflare Secret）、Pages Functions に `/api/push/*`、KV バインディングは `PUSH_KV` です。
 
 
 最新の追加対応:
 
-- バックアップ v2: 在庫に加えて消費履歴と学習した賞味期限も JSON に含め、復元時は ID / 食材名でマージ
+- バックアップ v3: 在庫に加えて消費履歴と学習した賞味期限も JSON に含め、復元時は ID / 食材名でマージ
 - 在庫の検索（食材名・メモ）と並び替え（期限 / 名前 / 登録日 / 保存場所）
 - CI が Pages と通知 Worker の両方をデプロイし、Playwright の E2E テストも実行
 - テスト: `node --test tests/*.js` と `npm run test:e2e`

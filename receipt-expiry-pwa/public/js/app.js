@@ -1,7 +1,8 @@
 import { initDB, addItemsBulk, getAllItemsSorted, updateItem, deleteItem, enqueueAnalysis, addConsumption, listConsumption, saveExpiryHint, listExpiryHints, addShoppingItems, listShoppingItems, deleteShoppingItem } from './db.js';
-import { processReceiptImage, renderPreviewCanvas } from './imageProcessor.js';
+import { processReceiptImage, renderPreviewCanvas, loadImageElement } from './imageProcessor.js';
 import { analyzeReceipt } from './apiClient.js';
 import { isValidDate, todayISO, defaultExpiryISO, daysUntilDate } from './dates.js';
+import { newId } from './ids.js';
 import { createQueuedAnalysis } from './queue.js';
 import { createConsumption, summarizeHistory } from './history.js';
 import { createExpiryHint, buildHintMap, normalizeFoodName } from './learning.js';
@@ -11,10 +12,10 @@ import { createCalendarUI } from './calendarUI.js';
 import { analyzePayloads } from './analysisFlow.js';
 import { createSettings, applyStoredTheme } from './settings.js';
 import { createQueueUI } from './queueUI.js';
+import { STORAGE_LABELS } from './domain.js';
 
 applyStoredTheme();
 
-const STORAGE_LABELS = { fridge: '冷蔵', freezer: '冷凍', pantry: '常温' };
 
 const byId = (id) => document.getElementById(id);
 const ui = {
@@ -298,7 +299,7 @@ async function renderPreview() {
   try {
     source = typeof createImageBitmap === 'function'
       ? await createImageBitmap(file, { imageOrientation: 'from-image' })
-      : await loadPreviewImage(file);
+      : await loadImageElement(file);
     const canvas = renderPreviewCanvas(source, { rotate: state.previewRotate, crop: cropOptions(), maxSize: 720 });
     ui.previewImage.width = canvas.width;
     ui.previewImage.height = canvas.height;
@@ -314,15 +315,6 @@ async function renderPreview() {
   byId('preview-confirm').textContent = state.previewIndex + 1 < state.previewFiles.length ? '次の画像へ' : '読み取る';
 }
 
-function loadPreviewImage(file) {
-  return new Promise((resolve, reject) => {
-    const url = URL.createObjectURL(file);
-    const image = new Image();
-    image.onload = () => { URL.revokeObjectURL(url); resolve(image); };
-    image.onerror = () => { URL.revokeObjectURL(url); reject(new Error('画像のデコードに失敗しました')); };
-    image.src = url;
-  });
-}
 
 function cropOptions() {
   return {
@@ -624,10 +616,6 @@ async function refreshHistorySummary() {
 }
 
 
-function makeId() {
-  if (typeof crypto !== 'undefined' && crypto.randomUUID) return crypto.randomUUID();
-  return `shop-${Date.now()}-${Math.random().toString(16).slice(2)}`;
-}
 
 async function refreshShopping() {
   const history = await listConsumption();
@@ -749,7 +737,7 @@ function wireEvents() {
     if (!name) return;
     const button = event.target.closest('button[data-name]');
     void addShoppingItems([{
-      id: makeId(),
+      id: newId('shop'),
       name,
       storage: button?.dataset.storage || 'pantry',
       expiryDate: button?.dataset.expiry || '',

@@ -1,7 +1,4 @@
-const RATE_PER_MINUTE = 5;
-const RATE_PER_DAY = 20;
-const BYOK_RATE_PER_MINUTE = 30;
-const BYOK_RATE_PER_DAY = 200;
+import { analysisLimits } from '../functions/shared/limits.js';
 
 export class RateLimiter {
   constructor(state) {
@@ -14,8 +11,7 @@ export class RateLimiter {
     // リセットされるため、Durable Object 内で現在時刻を生成する。
     const now = Date.now();
     const byok = body.byok === true;
-    const minuteLimit = byok ? BYOK_RATE_PER_MINUTE : RATE_PER_MINUTE;
-    const dayLimit = byok ? BYOK_RATE_PER_DAY : RATE_PER_DAY;
+    const { minuteLimit, dayLimit } = analysisLimits(byok);
 
     let bucket = await this.state.storage.get('bucket');
 

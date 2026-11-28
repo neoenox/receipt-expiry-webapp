@@ -8,6 +8,7 @@ import {
 } from './backup.js';
 import { buildHintMap } from './learning.js';
 import { daysUntilDate } from './dates.js';
+import { THEMES, DEFAULT_NOTIFY_HOUR } from './domain.js';
 
 const NOTIFY_STORAGE_KEY = 'receipt-expiry-notify';
 const THEME_STORAGE_KEY = 'receipt-expiry-theme';
@@ -39,20 +40,20 @@ initConsentMode();
 function notifyHour() {
   try {
     const raw = localStorage.getItem(NOTIFY_HOUR_KEY);
-    if (raw === null) return 6;
+    if (raw === null) return DEFAULT_NOTIFY_HOUR;
     const value = Number(raw);
-    return Number.isInteger(value) && value >= 0 && value <= 23 ? value : 6;
+    return Number.isInteger(value) && value >= 0 && value <= 23 ? value : DEFAULT_NOTIFY_HOUR;
   } catch {
-    return 6;
+    return DEFAULT_NOTIFY_HOUR;
   }
 }
 
 function storedTheme() {
   try {
     const value = localStorage.getItem(THEME_STORAGE_KEY);
-    return ['light', 'dark', 'auto'].includes(value) ? value : 'auto';
+    return THEMES.includes(value) ? value : THEMES[0];
   } catch {
-    return 'auto';
+    return THEMES[0];
   }
 }
 
@@ -83,9 +84,10 @@ export function createSettings({ ui, state, byId, showToast, openModal, todayISO
     }
   }
 
-  // 設定フラグは有効なのにプッシュ購読が消えている場合の検知結果。
-  // 再登録の導線は持たず、表示に反映するだけにとどめる。
-  let subscriptionMissing = false;
+  // ローカル購読の有無とサーバー側の 410 を別に保持する。
+  // 片方の再検証で他方の警告が消えないようにするため。
+  let localSubscriptionMissing = false;
+  let serverSubscriptionMissing = false;
 
   function refreshNotifyStatus() {
     if (!('Notification' in window) || !('serviceWorker' in navigator) || !('PushManager' in window)) {
@@ -94,17 +96,40 @@ export function createSettings({ ui, state, byId, showToast, openModal, todayISO
     }
     const time = `日本時間 ${String(notifyHour()).padStart(2, '0')}:00`;
     if (!isNotifyEnabled()) {
-      subscriptionMissing = false;
+      localSubscriptionMissing = false;
+      serverSubscriptionMissing = false;
       ui.notifyStatus.textContent = `リマインダ通知は無効です。有効にすると ${time} にお知らせします。`;
       return;
     }
     const permission = Notification.permission === 'granted' ? 'ブラウザの許可あり'
       : Notification.permission === 'denied' ? 'ブラウザの許可なし' : 'ブラウザの許可を確認中';
-    if (subscriptionMissing) {
+    if (localSubscriptionMissing || serverSubscriptionMissing) {
       ui.notifyStatus.textContent = `リマインダ通知は有効ですが、この端末への通知の登録が見つかりません。通知が届かない場合は、通知を一度無効にしてから有効にしてください（${time} / ${permission}）。`;
       return;
     }
     ui.notifyStatus.textContent = `リマインダ通知は有効です（${time} / ${permission}）。`;
+  }
+
+  async function currentPushSubscription() {
+    if (!isNotifyEnabled() || !('serviceWorker' in navigator) || !('PushManager' in window)) return null;
+    const registration = await navigator.serviceWorker.ready;
+    return registration.pushManager.getSubscription();
+  }
+
+  async function refreshSubscriptionStatus() {
+    if (!isNotifyEnabled()) {
+      localSubscriptionMissing = false;
+      serverSubscriptionMissing = false;
+      refreshNotifyStatus();
+      return;
+    }
+    try {
+      const subscription = await currentPushSubscription();
+      localSubscriptionMissing = !subscription;
+    } catch {
+      // 取得失敗では既存の表示を維持し、在庫操作を止めない。
+    }
+    refreshNotifyStatus();
   }
 
   function refreshApiKeyStatus() {
@@ -231,6 +256,7 @@ export function createSettings({ ui, state, byId, showToast, openModal, todayISO
     }
     hourSelect.value = String(notifyHour());
     refreshNotifyStatus();
+    void refreshSubscriptionStatus();
     refreshQueueStatus();
     refreshHistorySummary();
     void loadMonetization();
@@ -316,6 +342,7 @@ export function createSettings({ ui, state, byId, showToast, openModal, todayISO
         });
       }
       localStorage.setItem(NOTIFY_STORAGE_KEY, '1');
+      serverSubscriptionMissing = false;
       await syncPushReminder();
       refreshNotifyStatus();
       showToast('賞味期限の通知を有効にしました。');
@@ -349,16 +376,16 @@ export function createSettings({ ui, state, byId, showToast, openModal, todayISO
 
   async function syncPushReminder() {
     if (!isNotifyEnabled()) {
-      subscriptionMissing = false;
+      localSubscriptionMissing = false;
+      serverSubscriptionMissing = false;
       refreshNotifyStatus();
       return;
     }
     if (state.syncingPush) return;
     state.syncingPush = true;
     try {
-      const registration = await navigator.serviceWorker.ready;
-      const subscription = await registration.pushManager.getSubscription();
-      subscriptionMissing = !subscription;
+      const subscription = await currentPushSubscription();
+      localSubscriptionMissing = !subscription;
       refreshNotifyStatus();
       if (!subscription) return;
       const dates = state.items
@@ -379,7 +406,7 @@ export function createSettings({ ui, state, byId, showToast, openModal, todayISO
       });
       if (response.status === 410) {
         // サーバー側で購読が失われた場合も、ボタンを増やさず表示だけで伝える。
-        subscriptionMissing = true;
+        serverSubscriptionMissing = true;
         refreshNotifyStatus();
       }
     } catch {

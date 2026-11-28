@@ -6,11 +6,12 @@ import { createQueuedAnalysis, nextAttempt, shouldDiscard, MAX_QUEUE_ATTEMPTS } 
 import { createConsumption, summarizeHistory } from '../public/js/history.js';
 import { normalizeFoodName, createExpiryHint, buildHintMap } from '../public/js/learning.js';
 import { filterAndSortItems, annotateResultItems } from '../public/js/inventory.js';
-import { buildShoppingSuggestions, buildCalendar, shiftMonth, cropRect, shouldSendAtHour, jstDate, isSubscriptionRateLimited, retryDelayMs } from '../public/js/features2.js';
+import { buildShoppingSuggestions, buildCalendar, shiftMonth, cropRect, retryDelayMs } from '../public/js/features2.js';
+import { jstDate, shouldSendAtHour } from '../functions/shared/schedule.js';
 import { analyzePayloads } from '../public/js/analysisFlow.js';
 import { isValidDate, formatDate, todayISO, defaultExpiryISO, daysUntilDate } from '../public/js/dates.js';
 import { dataUrlMime, base64FromDataUrl, nextQuality } from '../public/js/imageOptions.js';
-import { buildReminderBody } from '../notify-worker/index.js';
+import { buildReminderBody } from '../functions/shared/reminder.js';
 
 test('queued analysis never stores an API key', () => {
   const job = createQueuedAnalysis({ imageBase64: 'aGVsbG8=', mimeType: 'image/jpeg', clientDate: '2026-11-22' });
@@ -199,6 +200,7 @@ test('crop rect respects rotation and bounds', () => {
 test('notification hour is evaluated in JST and catches up missed runs', () => {
   const now = new Date('2026-11-23T21:00:00Z'); // JST 06:00
   assert.equal(shouldSendAtHour({ notifyHour: 6 }, now), true);
+  assert.equal(shouldSendAtHour({ notifyHour: 6 }, now, '2026-11-24'), false);
   assert.equal(shouldSendAtHour({ notifyHour: 7 }, now), false);
 
   const late = new Date('2026-11-23T22:30:00Z'); // JST 07:30
@@ -241,12 +243,6 @@ test('reminder advances to the next expiry after notifying', async (t) => {
   assert.equal(updated.nextExpiry, '2026-11-30');
   assert.equal(updated.daysUntil, 6);
   assert.ok(updated.notifiedAt);
-});
-
-test('subscription writes are rate limited', () => {
-  assert.equal(isSubscriptionRateLimited(5, 10), false);
-  assert.equal(isSubscriptionRateLimited(11, 10), true);
-  assert.equal(isSubscriptionRateLimited(1, 1000), true);
 });
 
 

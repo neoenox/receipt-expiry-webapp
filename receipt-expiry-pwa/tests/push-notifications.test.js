@@ -2,7 +2,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { onRequestPost } from '../functions/api/push/subscribe.js';
 import { sendReminders } from '../functions/shared/reminder.js';
-import { jstDate, shouldSendAtHour } from '../public/js/features2.js';
+import { jstDate, shouldSendAtHour } from '../functions/shared/schedule.js';
+import { SUBSCRIPTION_RATE } from '../functions/shared/limits.js';
 
 const ORIGIN = 'https://receipt-expiry-pwa.pages.dev';
 
@@ -13,10 +14,12 @@ function addDays(date, amount) {
 }
 
 function createKv(store = new Map()) {
+  const puts = [];
   return {
     store,
+    puts,
     async get(key) { return store.get(key) ?? null; },
-    async put(key, value) { store.set(key, value); },
+    async put(key, value, options) { store.set(key, value); puts.push({ key, value, options }); },
     async delete(key) { store.delete(key); },
     async list() {
       const names = [...store.keys()].filter((key) => !key.startsWith('subrate:')
@@ -78,6 +81,9 @@ test('resubscribe preserves a legacy notified expiry and selects the next date',
   assert.deepEqual(updated.notifiedExpiryDates, [today]);
   assert.equal(updated.notifiedAt, notifiedAt);
   assert.equal(updated.daysUntil, 1);
+  const ratePut = kv.puts.find(({ key }) => key.startsWith('subrate:'));
+  assert.ok(ratePut);
+  assert.equal(ratePut.options?.expirationTtl, SUBSCRIPTION_RATE.windowSeconds);
 });
 
 test('notification worker processes KV cursor pages', async () => {
@@ -153,6 +159,29 @@ test('worker advances an expiry already recorded as notified without sending aga
   const updated = JSON.parse(store.get('sub1'));
   assert.equal(updated.nextExpiry, next);
   assert.deepEqual(updated.notifiedExpiryDates, [today]);
+});
+
+test('worker suppresses a scheduled-hour retry when already notified today', async () => {
+  const now = new Date('2026-11-23T21:00:00Z'); // JST 06:00, 2026-11-24
+  const today = jstDate(now);
+  const store = new Map([['sub1', JSON.stringify({
+    subscription: subscription(),
+    nextExpiry: today,
+    expiryDates: [today],
+    notifyHour: 6,
+    notifiedAt: now.getTime(),
+  })]]);
+  let sent = 0;
+
+  const count = await sendReminders({
+    kv: createKv(store),
+    sendNotification: async () => { sent += 1; },
+    vapid: { publicKey: 'public', privateKey: 'private' },
+    now,
+  });
+
+  assert.equal(count, 0);
+  assert.equal(sent, 0);
 });
 
 test('scheduled-hour retry is suppressed for an expiry already notified today', () => {

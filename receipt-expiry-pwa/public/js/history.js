@@ -1,17 +1,14 @@
-export const REASONS = new Set(['eaten', 'discarded']);
+import { newId } from './ids.js';
+import { CONSUMPTION_REASONS } from './domain.js';
 
-function newId() {
-  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
-    return crypto.randomUUID();
-  }
-  return `history-${Date.now()}-${Math.random().toString(16).slice(2)}`;
-}
+const REASONS = new Set(CONSUMPTION_REASONS);
+
 
 export function createConsumption(item, reason) {
   if (!REASONS.has(reason)) throw new Error('記録の種別が不正です。');
   if (!item || typeof item.name !== 'string') throw new Error('食材情報が不正です。');
   return {
-    id: newId(),
+    id: newId('history'),
     name: item.name,
     storage: item.storage || 'pantry',
     expiryDate: item.expiryDate || '',
