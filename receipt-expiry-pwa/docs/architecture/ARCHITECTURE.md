@@ -1,4 +1,4 @@
-# アーキテクチャマップ（Round 4 更新版）
+# アーキテクチャマップ（Round 8 更新版）
 
 > 詳細は `01_要件定義書_機能仕様書.md`〜`03_プログラム設計書_詳細設計書.md`。このファイルは実装の現在地を記録する。スキャン結果で更新する。
 
@@ -90,7 +90,7 @@ flowchart LR
 | 通知ハンドラ | Round 4 で `notify-worker/` を削除し `functions/notify.js` に統一 | 解決（Round 4） |
 | `daysUntilDate` | `reminder.js:22-24`, `subscribe.js:47-48`, `dates.js:28-35` | 後者はローカル日付で意味が異なる。要契約確認 |
 | `DATE_PATTERN` | `analyze.js:75`, `subscribe.js:4`, `reminder.js:4`, `dates.js:1` | 共有化候補 |
-| エラー/レスポンス | `shared/http.js:3-16` があるが `config.js:6-8`, `push/config.js:3-4`, `oci/server.js:79-82,216` が自作 | 共通化候補 |
+| エラー/レスポンス | Round 8 で config / push/config / OCI 500 を `shared/http.js` の `json` / `errorResponse` に統一 | 解決（Round 8） |
 | AI 結果正規化 | `analyze.js:188-206` と `apiClient.js:40-62` | 二重検証は意図的だが定義は共有化可能 |
 | KV キー | `subcount:total`（`subscribe.js:9`, `unsubscribe.js:4`, `reminder.js:99-100`）、`metrics:`（`metrics.js:19`, `subscribe.js:83`） | 定数化候補 |
 

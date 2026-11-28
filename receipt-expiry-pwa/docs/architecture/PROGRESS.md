@@ -44,7 +44,8 @@
 | 4 | 未配線の通知 Worker 削除と仕様同期 | `8bd9775` | unit 64 pass / E2E 45 pass + 既知 flake 1 / 独立レビュー済み |
 | 5 | 通知設定の購読状態 split（既知 flake 解消） | `e1630b5` | unit 64 pass / E2E 46 pass / 実画面確認 / 独立レビュー2回 |
 | 6 | ID生成・画像読込・キュー上限の集約 | `bfea90d` | unit 68 pass / E2E 46 pass / 独立レビュー済み |
-| 7 | 列挙値・既定値の単一化 | 同コミット | unit 70 pass / E2E 46 pass / 独立レビュー済み |
+| 7 | 列挙値・既定値の単一化 | `061da48` | unit 70 pass / E2E 46 pass / 独立レビュー済み |
+| 8 | JSONレスポンス生成の共通化 | 同コミット | unit 73 pass / E2E 46 pass / Pages build / 独立レビュー済み |
 
 ## 既知の flakes
 

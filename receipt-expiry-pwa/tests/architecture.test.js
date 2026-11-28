@@ -90,3 +90,11 @@ test('browser domain values are declared once', () => {
     );
   }
 });
+
+test('config endpoints use the shared JSON response helper', () => {
+  for (const file of ['functions/api/config.js', 'functions/api/push/config.js']) {
+    const source = read(path.join(ROOT, file));
+    assert.match(source, /import \{ json \} from/);
+    assert.doesNotMatch(source, /new Response\(/);
+  }
+});

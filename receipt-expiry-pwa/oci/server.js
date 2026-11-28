@@ -12,6 +12,7 @@ import { onRequestPost as onPushUnsubscribe } from '../functions/api/push/unsubs
 import { onRequestGet as onPushConfig } from '../functions/api/push/config.js';
 import { createKvAdapter } from './kv-adapter.js';
 import { sendReminders } from '../functions/shared/reminder.js';
+import { errorResponse } from '../functions/shared/http.js';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../public');
 const PORT = Number(process.env.PORT || 3000);
@@ -206,14 +207,15 @@ function startReminderTimer() {
 }
 
 const server = http.createServer((req, res) => {
-  handleRequest(req, res).catch((error) => {
+  handleRequest(req, res).catch(async (error) => {
     console.error('[server]', error);
     if (res.headersSent) {
       res.end();
       return;
     }
-    res.writeHead(500, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
-    res.end(JSON.stringify({ error: { code: 'INTERNAL_ERROR', message: 'リクエストを処理できませんでした。' } }));
+    const response = errorResponse(500, 'INTERNAL_ERROR', 'リクエストを処理できませんでした。');
+    res.writeHead(response.status, Object.fromEntries(response.headers));
+    res.end(await response.text());
   });
 });
 
