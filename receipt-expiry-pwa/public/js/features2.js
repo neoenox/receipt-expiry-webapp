@@ -1,5 +1,6 @@
+import { STORAGE_TYPES } from './domain.js';
 const NAME_KEY = (name) => String(name || '').trim().toLowerCase().replace(/\s+/g, '');
-const VALID_STORAGE = new Set(['fridge', 'freezer', 'pantry']);
+const VALID_STORAGE = new Set(STORAGE_TYPES);
 
 /** 消費履歴から、現在の在庫にない食材を頻度順に提案する。 */
 export function buildShoppingSuggestions(history, items, limit = 8) {

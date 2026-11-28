@@ -1,6 +1,7 @@
 import { newId } from './ids.js';
+import { CONSUMPTION_REASONS } from './domain.js';
 
-export const REASONS = new Set(['eaten', 'discarded']);
+const REASONS = new Set(CONSUMPTION_REASONS);
 
 
 export function createConsumption(item, reason) {

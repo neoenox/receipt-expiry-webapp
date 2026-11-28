@@ -1,8 +1,9 @@
 import { isValidDate } from './dates.js';
+import { STORAGE_TYPES, CONSUMPTION_REASONS, THEMES, DEFAULT_NOTIFY_HOUR } from './domain.js';
 const FORMAT = 'receipt-expiry-backup';
 const VERSION = 3;
-const VALID_STORAGE = new Set(['fridge', 'freezer', 'pantry']);
-const VALID_REASONS = new Set(['eaten', 'discarded']);
+const VALID_STORAGE = new Set(STORAGE_TYPES);
+const VALID_REASONS = new Set(CONSUMPTION_REASONS);
 
 function normalizeItem(raw, index) {
   const label = `在庫${index + 1}行目`;
@@ -70,8 +71,8 @@ function normalizeShopping(raw, index) {
 
 function normalizeSettings(raw) {
   const source = raw || {};
-  const theme = ['auto', 'light', 'dark'].includes(source.theme) ? source.theme : 'auto';
-  const hour = Number.isFinite(source.notifyHour) ? Math.max(0, Math.min(23, Math.round(source.notifyHour))) : 6;
+  const theme = THEMES.includes(source.theme) ? source.theme : THEMES[0];
+  const hour = Number.isFinite(source.notifyHour) ? Math.max(0, Math.min(23, Math.round(source.notifyHour))) : DEFAULT_NOTIFY_HOUR;
   return { theme, notifyHour: hour, notifyEnabled: Boolean(source.notifyEnabled) };
 }
 

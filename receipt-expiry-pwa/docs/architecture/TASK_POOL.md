@@ -6,9 +6,9 @@
 
 | ID | タスク | 価値 | リスク | 状態 |
 |---|---|---|---|---|
-| T-011 | 保存場所・理由・テーマ・日付パターン・件数上限を browser/server 共通定数へ集約し、E2E/unit も参照 | 高 | 中 | next |
-| T-018 | AI 結果正規化の既定値（server=7日後 / client=''）を契約として一本化 | 中 | 中 | queued |
+| T-018 | AI 結果正規化の既定値（server=7日後 / client=''）を契約として一本化 | 中 | 中 | next |
 | T-019 | エラーコード / レスポンス生成の共通化（`shared/http.js` の利用漏れ） | 中 | 中 | queued |
+| T-020 | 日付正規表現と通知時刻クランプの横断共有（server/client の意味差を仕様化） | 中 | 中 | queued |
 
 ## 完了
 
@@ -21,9 +21,10 @@
 | T-012 | レート制限ポリシーの単一化 | Round 2。unit 61 pass / DO 境界テスト / レビュー済み |
 | T-014 | アーキテクチャ規範の CI 強制 | Round 3。unit 64 pass / 違反検出の実証 / レビュー済み |
 | T-013 | 未配線の `notify-worker/` を削除し参照を統一 | Round 4。unit 64 pass / 参照切れなし |
-| T-015 | 仕様書 / README と実装のドリフトを解消 | Round 4/6。通知・DB v6 / backup v3 / SW v12 を反映 |
+| T-015 | 仕様書 / README と実装のドリフトを解消 | Round 4/6/7。通知・DB v6 / backup v3 / SW v13 を反映 |
 | T-016 | E2E の通知 flake を解消 | Round 5。E2E 46/46 / 410 再オープン assertion / 実画面確認 |
 | T-017 | ID生成・画像読込・キュー上限を集約 | Round 6。unit 68 pass / SW precache 修正 / レビュー指摘を反映 |
+| T-011 | ブラウザ側の列挙・既定値を集約 | Round 7。unit 70 pass / server 値との一致をレビューで確認 |
 
 ## 確認待ち（blocked）
 
@@ -41,3 +42,4 @@
 - 2026-11-28: Round 4 完了。旧 Worker と re-export を削除し、仕様記述を現行実装へ同期。
 - 2026-11-28: Round 5 完了。購読状態をローカル/サーバーで分離し、既知 flake を解消。
 - 2026-11-28: Round 6 完了。ID/画像読込/キュー上限を集約し、SW precache 漏れを修正。
+- 2026-11-28: Round 7 完了。保存場所・理由・テーマ・既定時刻を domain.js に集約。

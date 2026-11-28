@@ -79,3 +79,14 @@ test('service worker precaches every browser module', () => {
   const modules = walk(path.join(ROOT, 'public/js')).map((file) => `/js/${path.basename(file)}`);
   assert.deepEqual(modules.filter((module) => !precached.has(module)), []);
 });
+
+test('browser domain values are declared once', () => {
+  const browserFiles = walk(path.join(ROOT, 'public/js'));
+  for (const name of ['STORAGE_TYPES', 'STORAGE_LABELS', 'CONSUMPTION_REASONS', 'THEMES', 'DEFAULT_NOTIFY_HOUR']) {
+    const pattern = new RegExp(`(?:export\\s+)?const\\s+${name}\\s*=`);
+    assert.deepEqual(
+      browserFiles.filter((file) => pattern.test(read(file))).map(relative),
+      ['public/js/domain.js'],
+    );
+  }
+});

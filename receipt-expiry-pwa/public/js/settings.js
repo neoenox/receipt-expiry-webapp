@@ -8,6 +8,7 @@ import {
 } from './backup.js';
 import { buildHintMap } from './learning.js';
 import { daysUntilDate } from './dates.js';
+import { THEMES, DEFAULT_NOTIFY_HOUR } from './domain.js';
 
 const NOTIFY_STORAGE_KEY = 'receipt-expiry-notify';
 const THEME_STORAGE_KEY = 'receipt-expiry-theme';
@@ -39,20 +40,20 @@ initConsentMode();
 function notifyHour() {
   try {
     const raw = localStorage.getItem(NOTIFY_HOUR_KEY);
-    if (raw === null) return 6;
+    if (raw === null) return DEFAULT_NOTIFY_HOUR;
     const value = Number(raw);
-    return Number.isInteger(value) && value >= 0 && value <= 23 ? value : 6;
+    return Number.isInteger(value) && value >= 0 && value <= 23 ? value : DEFAULT_NOTIFY_HOUR;
   } catch {
-    return 6;
+    return DEFAULT_NOTIFY_HOUR;
   }
 }
 
 function storedTheme() {
   try {
     const value = localStorage.getItem(THEME_STORAGE_KEY);
-    return ['light', 'dark', 'auto'].includes(value) ? value : 'auto';
+    return THEMES.includes(value) ? value : THEMES[0];
   } catch {
-    return 'auto';
+    return THEMES[0];
   }
 }
 

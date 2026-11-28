@@ -12,10 +12,10 @@ import { createCalendarUI } from './calendarUI.js';
 import { analyzePayloads } from './analysisFlow.js';
 import { createSettings, applyStoredTheme } from './settings.js';
 import { createQueueUI } from './queueUI.js';
+import { STORAGE_LABELS } from './domain.js';
 
 applyStoredTheme();
 
-const STORAGE_LABELS = { fridge: '冷蔵', freezer: '冷凍', pantry: '常温' };
 
 const byId = (id) => document.getElementById(id);
 const ui = {

@@ -25,7 +25,7 @@ flowchart LR
 |---|---|---|
 | 静的配信 | `public/` + Service Worker（network-first / api は network-only） | `public/sw.js` |
 | フロントコントローラ | `public/js/app.js`（イベント配線 + UI 描画） | `app.js` |
-| 純粋ロジック | `dates.js`, `ids.js`, `inventory.js`, `features2.js`, `learning.js`, `history.js`, `queue.js` | 各ファイル |
+| 純粋ロジック | `dates.js`, `domain.js`, `ids.js`, `inventory.js`, `features2.js`, `learning.js`, `history.js`, `queue.js` | 各ファイル |
 | 永続化 | IndexedDB v6（`db.js`） | `db.js` |
 | 設定 | `localStorage`（`settings.js`） | `settings.js` |
 | API プロキシ | Pages Functions `functions/api/*` | `functions/api/analyze.js` 他 |
@@ -49,6 +49,7 @@ flowchart LR
 - 通知時刻判定: `functions/shared/schedule.js`（ADR-003）
 - レート制限ポリシー: `functions/shared/limits.js`（ADR-004）
 - 通知ハンドラ: `functions/notify.js`（Round 4 で旧 Worker を削除）
+- ブラウザ側の列挙/既定値: `public/js/domain.js`（Round 7）
 - 強制: `tests/architecture.test.js` がレイヤー逆転・二重定義・全ブラウザモジュールの SW precache を `npm test` で検出（ADR-005）
 
 ## スキャンで更新するセクション
@@ -126,10 +127,9 @@ ES import の循環はなし。ただし `app.js:123-136` が `showToast`, `subm
 
 | 概念 | 重複箇所 | 判定 |
 |---|---|---|
-| 保存場所列挙 | `apiClient.js:4`, `backup.js:4`, `features2.js:2`, `index.html:33-36,171,382`, `functions/api/analyze.js:12,30` | 5重。単一化候補 |
-| 廃棄理由 | `history.js:1`, `backup.js:5` | 同一 Set の再定義 |
+| 保存場所列挙 / 廃棄理由 / テーマ / 通知既定時刻 | Round 7 でブラウザ側を `public/js/domain.js` に一本化。サーバー側 enum と値は一致 | 解決（Round 7、ブラウザ側） |
+| 通知時刻デフォルト/クランプ | 既定値は `domain.js` を参照。クランプ処理は settings / backup / server に残る | 既定値は解決（Round 7） |
 | 日付正規表現 | `dates.js:1`, `learning.js:1`, `queue.js:1`, `features2.js:35`, `subscribe.js:4`, `reminder.js:4` | `isValidDate` があるのに再実装 |
-| 通知時刻デフォルト/クランプ | `settings.js:39-47`, `backup.js:74`, `functions/shared/schedule.js:14` | 3重（旧 `features2.js` の定義は削除済み） |
 | ID 生成 | Round 6 で `public/js/ids.js` に一本化（旧4実装を削除、prefix は呼び出し側で明示） | 解決（Round 6） |
 | 画像読込 | Round 6 で `imageProcessor.js` の `loadImageElement` に一本化 | 解決（Round 6） |
 | 画像サイズ/クロップ上限 | `imageProcessor.js:4` (1024), `app.js:302` (720), `index.html:111-114` (40%), `features2.js:50-53` (0.9) | 意味が異なる定数を峻別する必要 |

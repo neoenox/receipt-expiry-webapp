@@ -1,5 +1,5 @@
 const CACHE_PREFIX = 'receipt-expiry-';
-const CACHE_NAME = `${CACHE_PREFIX}v12`;
+const CACHE_NAME = `${CACHE_PREFIX}v13`;
 const STATIC_ASSETS = [
   '/',
   '/index.html',
@@ -23,6 +23,7 @@ const STATIC_ASSETS = [
   '/js/imageProcessor.js',
   '/js/apiClient.js',
   '/js/ids.js',
+  '/js/domain.js',
   '/icons/icon-192.png',
   '/icons/icon-512.png',
 ];

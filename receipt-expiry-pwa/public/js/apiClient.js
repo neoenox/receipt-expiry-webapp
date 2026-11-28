@@ -1,7 +1,8 @@
 import { isValidDate } from './dates.js';
+import { STORAGE_TYPES } from './domain.js';
 
 const ENDPOINT = '/api/analyze';
-const VALID_STORAGE = new Set(['fridge', 'freezer', 'pantry']);
+const VALID_STORAGE = new Set(STORAGE_TYPES);
 const MAX_ITEMS = 50;
 
 /** /api/analyze へ画像を送信し、検証済みの解析結果を返す。 */
