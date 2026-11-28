@@ -35,3 +35,9 @@
 - Context: Round 1/2 で解消したレイヤー逆転と二重定義が、将来の開発で再導入されることを防ぐ必要がある。lint/format 基盤はまだ存在しない。
 - Decision: `tests/architecture.test.js` にファイルスキャン-based の不変条件を書き、`npm test`（CI の `npm run test`）に載せる。新しい依存は追加しない。
 - Consequences: 規範変更はテストと同じ PR でレビューできる。正規表現ベースのため、新しい違反パターンが出た場合は検査自体を拡張する必要がある。
+
+## ADR-006 — 通知の購読不足はローカルとサーバーで状態を分ける
+
+- Context: 旧 `subscriptionMissing` は `PushManager.getSubscription()` と `/api/push/subscribe` の 410 を同じフラグに混在させていた。設定再オープン時のローカル再検証が 410 警告を消し、逆に起動時同期の結果が固定されて購読消失警告が出ない flakes も起きていた。
+- Decision: `localSubscriptionMissing` と `serverSubscriptionMissing` を分離し、表示は両者の OR で決める。設定オープン時はローカルのみ再検証し、410 は再有効化または無効化まで保持する。
+- Consequences: 設定再オープンでローカル購読の変化を反映でき、410 警告も消えない。再オープン直後に一瞬古い表示が描画されるが、非同期更新で直ちに訂正される。

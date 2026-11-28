@@ -286,6 +286,10 @@ test('notify status warns when a push subscription is gone (410 from subscribe A
   await page.click('[data-settings-tab="notify"]');
   await page.click('#notify-enable-btn');
   await expect(page.locator('#notify-status')).toContainText('通知を一度無効にしてから有効にしてください');
+  await page.click('#settings-close');
+  await page.click('#settings-btn');
+  await page.click('[data-settings-tab="notify"]');
+  await expect(page.locator('#notify-status')).toContainText('通知を一度無効にしてから有効にしてください');
 });
 
 test('notify status warns when getSubscription returns null after enabling', async ({ page }) => {
