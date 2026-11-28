@@ -13,9 +13,10 @@ export function jstDate(now = new Date()) {
 export function shouldSendAtHour(entry, now = new Date(), notifiedDate) {
   const hour = Number.isFinite(entry?.notifyHour) ? Math.max(0, Math.min(23, entry.notifyHour)) : 6;
   const jstHour = (now.getUTCHours() + 9) % 24;
-  if (jstHour === hour) return true;
+  const today = jstDate(now);
+  // 同じ日・同じ設定時刻にCronが再実行されても二重通知しない。
+  if (jstHour === hour) return notifiedDate !== today;
   if (notifiedDate === undefined) return false;
   // 設定時刻を過ぎていて、今日まだ通知していなければ送る。
-  // notifiedDate が null（未通知）のときも取りこぼしとして扱う。
-  return jstHour > hour && notifiedDate !== jstDate(now);
+  return jstHour > hour && notifiedDate !== today;
 }

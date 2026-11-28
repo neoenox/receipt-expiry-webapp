@@ -1,5 +1,5 @@
 import { clientIp, json, readJsonWithLimit, requireSameOriginJson } from '../../shared/http.js';
-import { jstDate } from '../../../public/js/features2.js';
+import { jstDate } from '../../shared/schedule.js';
 
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 const RATE_WINDOW_SECONDS = 3600;
