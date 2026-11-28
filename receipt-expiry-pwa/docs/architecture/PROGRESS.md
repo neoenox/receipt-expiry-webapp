@@ -45,8 +45,14 @@
 | 5 | 通知設定の購読状態 split（既知 flake 解消） | `e1630b5` | unit 64 pass / E2E 46 pass / 実画面確認 / 独立レビュー2回 |
 | 6 | ID生成・画像読込・キュー上限の集約 | `bfea90d` | unit 68 pass / E2E 46 pass / 独立レビュー済み |
 | 7 | 列挙値・既定値の単一化 | `061da48` | unit 70 pass / E2E 46 pass / 独立レビュー済み |
-| 8 | JSONレスポンス生成の共通化 | 同コミット | unit 73 pass / E2E 46 pass / Pages build / 独立レビュー済み |
+| 8 | JSONレスポンス生成の共通化 | `c37232a` | unit 73 pass / E2E 46 pass / Pages build / 独立レビュー済み |
 
 ## 既知の flakes
 
 - Round 1〜4 で観測された通知 flake は Round 5 で解消済み。全 E2E が 46/46 通過している。
+
+## 収束判定（ADR-007）
+
+- 安全に自動化できる高価値改善は Round 8 で一巡した。
+- 最終状態: unit 73 pass / E2E 46 pass / Pages Functions build 成功 / Wrangler dry-run 成功 / 独立レビューは各ラウンドで実施。
+- 残課題はプロダクト判断（B-001〜B-003）または共有 `state` / `ui` の所有権再設計（T-021、高リスク）のみ。これらは `TASK_POOL.md` に保持し、判断を待つ。

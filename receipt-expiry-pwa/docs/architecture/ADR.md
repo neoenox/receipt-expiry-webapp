@@ -41,3 +41,9 @@
 - Context: 旧 `subscriptionMissing` は `PushManager.getSubscription()` と `/api/push/subscribe` の 410 を同じフラグに混在させていた。設定再オープン時のローカル再検証が 410 警告を消し、逆に起動時同期の結果が固定されて購読消失警告が出ない flakes も起きていた。
 - Decision: `localSubscriptionMissing` と `serverSubscriptionMissing` を分離し、表示は両者の OR で決める。設定オープン時はローカルのみ再検証し、410 は再有効化または無効化まで保持する。
 - Consequences: 設定再オープンでローカル購読の変化を反映でき、410 警告も消えない。再オープン直後に一瞬古い表示が描画されるが、非同期更新で直ちに訂正される。
+
+## ADR-007 — 低リスク改善の収束と残課題の扱い
+
+- Context: Round 1〜8 で通知判定、レート制限、規範強制、デッドコード、flakes、ID/画像/列挙、HTTP レスポンスを順に集約し、unit 73 / E2E 46 が安定した。残る候補はプロダクト判断（AI 期限既定値・通知スケジュール・BYOK 制限）か、共有 `state` / `ui` の所有権再設計という高リスク変更だけである。
+- Decision: 安全に自動化できる高価値改善はここで収束とした。残課題は `TASK_POOL.md` に `blocked` / `queued` として保持し、判断または専用の設計ラウンドを待つ。
+- Consequences: 追加の抽象化やディレクトリ移動を行わず、既存の契約とテストを維持する。再開時は TASK_POOL の先頭から次のラウンドを始める。
