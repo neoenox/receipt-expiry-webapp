@@ -40,8 +40,9 @@
 |---|---|---|---|
 | 1 | 通知時刻判定の単一化とレイヤー逆転の解消 | `e6c98a0` | unit 58 pass / E2E 45 pass + 既知 flake 1 / 独立レビュー済み |
 | 2 | レート制限ポリシーの単一化 | `cd4c62d` | unit 61 pass / E2E 45 pass + 既知 flake 1 / Wrangler dry-run / 独立レビュー済み |
-| 3 | アーキテクチャ規範の CI 強制 | 同コミット | unit 64 pass / E2E 45 pass + 既知 flake 1 / 違反検出の実証 / 独立レビュー済み |
+| 3 | アーキテクチャ規範の CI 強制 | `e71daec` | unit 64 pass / E2E 45 pass + 既知 flake 1 / 違反検出の実証 / 独立レビュー済み |
+| 4 | 未配線の通知 Worker 削除と仕様同期 | 同コミット | unit 64 pass / E2E 45 pass + 既知 flake 1 |
 
 ## 既知の flakes
 
-- `notify status warns when getSubscription returns null after enabling` は変更前ベースライン（`origin/main` @ `4c3781a`）でも mobile/desktop ともに失敗を再現。起因は起動時 Push 同期と `state.syncingPush` の競合で、Round 1〜3 の回帰ではない。TASK_POOL の T-016 / B-002 で追跡する。
+- `notify status warns when getSubscription returns null after enabling` は変更前ベースライン（`origin/main` @ `4c3781a`）でも mobile/desktop ともに失敗を再現。起因は起動時 Push 同期と `state.syncingPush` の競合で、Round 1〜4 の回帰ではない。TASK_POOL の T-016 / B-002 で追跡する。

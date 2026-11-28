@@ -11,7 +11,7 @@ import { jstDate, shouldSendAtHour } from '../functions/shared/schedule.js';
 import { analyzePayloads } from '../public/js/analysisFlow.js';
 import { isValidDate, formatDate, todayISO, defaultExpiryISO, daysUntilDate } from '../public/js/dates.js';
 import { dataUrlMime, base64FromDataUrl, nextQuality } from '../public/js/imageOptions.js';
-import { buildReminderBody } from '../notify-worker/index.js';
+import { buildReminderBody } from '../functions/shared/reminder.js';
 
 test('queued analysis never stores an API key', () => {
   const job = createQueuedAnalysis({ imageBase64: 'aGVsbG8=', mimeType: 'image/jpeg', clientDate: '2026-11-22' });

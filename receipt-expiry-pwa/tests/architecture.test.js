@@ -8,6 +8,7 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
 function walk(dir) {
   const files = [];
+  if (!fs.existsSync(dir)) return files;
   for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
     if (entry.name === 'node_modules' || entry.name.startsWith('.ci-')) continue;
     const full = path.join(dir, entry.name);
@@ -29,7 +30,6 @@ const serverFiles = [
   ...walk(path.join(ROOT, 'functions')),
   ...walk(path.join(ROOT, 'ratelimit-worker')),
   ...walk(path.join(ROOT, 'oci')),
-  ...walk(path.join(ROOT, 'notify-worker')),
 ];
 const sourceFiles = [...serverFiles, ...walk(path.join(ROOT, 'public/js'))];
 
