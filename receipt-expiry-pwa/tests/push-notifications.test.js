@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { onRequestPost } from '../functions/api/push/subscribe.js';
 import { sendReminders } from '../functions/shared/reminder.js';
 import { jstDate, shouldSendAtHour } from '../functions/shared/schedule.js';
+import { SUBSCRIPTION_RATE } from '../functions/shared/limits.js';
 
 const ORIGIN = 'https://receipt-expiry-pwa.pages.dev';
 
@@ -13,10 +14,12 @@ function addDays(date, amount) {
 }
 
 function createKv(store = new Map()) {
+  const puts = [];
   return {
     store,
+    puts,
     async get(key) { return store.get(key) ?? null; },
-    async put(key, value) { store.set(key, value); },
+    async put(key, value, options) { store.set(key, value); puts.push({ key, value, options }); },
     async delete(key) { store.delete(key); },
     async list() {
       const names = [...store.keys()].filter((key) => !key.startsWith('subrate:')
@@ -78,6 +81,9 @@ test('resubscribe preserves a legacy notified expiry and selects the next date',
   assert.deepEqual(updated.notifiedExpiryDates, [today]);
   assert.equal(updated.notifiedAt, notifiedAt);
   assert.equal(updated.daysUntil, 1);
+  const ratePut = kv.puts.find(({ key }) => key.startsWith('subrate:'));
+  assert.ok(ratePut);
+  assert.equal(ratePut.options?.expirationTtl, SUBSCRIPTION_RATE.windowSeconds);
 });
 
 test('notification worker processes KV cursor pages', async () => {

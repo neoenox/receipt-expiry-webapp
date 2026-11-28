@@ -6,7 +6,7 @@ import { createQueuedAnalysis, nextAttempt, shouldDiscard, MAX_QUEUE_ATTEMPTS } 
 import { createConsumption, summarizeHistory } from '../public/js/history.js';
 import { normalizeFoodName, createExpiryHint, buildHintMap } from '../public/js/learning.js';
 import { filterAndSortItems, annotateResultItems } from '../public/js/inventory.js';
-import { buildShoppingSuggestions, buildCalendar, shiftMonth, cropRect, isSubscriptionRateLimited, retryDelayMs } from '../public/js/features2.js';
+import { buildShoppingSuggestions, buildCalendar, shiftMonth, cropRect, retryDelayMs } from '../public/js/features2.js';
 import { jstDate, shouldSendAtHour } from '../functions/shared/schedule.js';
 import { analyzePayloads } from '../public/js/analysisFlow.js';
 import { isValidDate, formatDate, todayISO, defaultExpiryISO, daysUntilDate } from '../public/js/dates.js';
@@ -243,12 +243,6 @@ test('reminder advances to the next expiry after notifying', async (t) => {
   assert.equal(updated.nextExpiry, '2026-11-30');
   assert.equal(updated.daysUntil, 6);
   assert.ok(updated.notifiedAt);
-});
-
-test('subscription writes are rate limited', () => {
-  assert.equal(isSubscriptionRateLimited(5, 10), false);
-  assert.equal(isSubscriptionRateLimited(11, 10), true);
-  assert.equal(isSubscriptionRateLimited(1, 1000), true);
 });
 
 

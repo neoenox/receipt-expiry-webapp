@@ -23,3 +23,9 @@
 - Context: `jstDate` / `shouldSendAtHour` が `features2.js` と `functions/shared/schedule.js` に重複し、設定時刻ちょうどの再実行で片方だけ二重送信を許す挙動不一致があった。本番 `reminder.js` は片方、`subscribe.js` はもう片方を参照し、テストはクライアント側だけを検証していた。
 - Decision: `functions/shared/schedule.js` を唯一の実装とし、同一 JST 日かつ同一設定時刻の再実行を抑止するガードを採用する。`subscribe.js` の `public/js` 直接 import を廃止し、テストは本番共有モジュールを import する。
 - Consequences: サーバー/クライアント/テストの挙動が一致する。通知本文・購読契約は不変。旧 `features2.js` の export は移行後に削除した。
+
+## ADR-004 — レート制限ポリシーは `functions/shared/limits.js` が権威
+
+- Context: 解析ハンドラと Durable Object が同じ 5/20/30/200 を別定義し、購読・キー検証・クライアントにも同一趣旨の定数/関数が分散していた。境界変更時に片方だけ更新されるリスクがあった。
+- Decision: ポリシー値と上限判定を `functions/shared/limits.js` に集約し、すべてのサーバー実装が参照する。テスト専用だったクライアント側の重複関数は削除し、Durable Object が同じポリシーを使う契約テストを追加する。
+- Consequences: Wrangler ビルドは外側モジュールをバンドルするため DO プロジェクトからも参照可能。BYOK と共有キーの差、429 の境界、購読/キー検証の上限は不変。共有キーのみ制限という仕様記述との差は B-001 として保留。

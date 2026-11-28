@@ -1,14 +1,10 @@
 import { errorResponse, json, readJsonWithLimit, requireSameOriginJson, clientIp } from '../shared/http.js';
+import { analysisLimits } from '../shared/limits.js';
 
 const MAX_IMAGE_CHARS = 2_800_000;
 const MAX_BODY_BYTES = MAX_IMAGE_CHARS + 4096;
 const MAX_ITEMS = 50;
 const GEMINI_TIMEOUT_MS = 20_000;
-const RATE_PER_MINUTE = 5;
-const RATE_PER_DAY = 20;
-// BYOK はユーザー自身の枠だが、共有キーへのバイパスに使われないよう最低限の制限を残す。
-const BYOK_RATE_PER_MINUTE = 30;
-const BYOK_RATE_PER_DAY = 200;
 const VALID_STORAGE = new Set(['fridge', 'freezer', 'pantry']);
 
 // Cloudflare では KV バインディングで全拠点共通のカウンタを使う。
@@ -104,8 +100,7 @@ function bucketKeys(ip, now) {
 async function isRateLimited(request, env, byok) {
   const ip = `${byok ? 'byok' : 'shared'}:${clientIp(request)}`;
   const now = Date.now();
-  const minuteLimit = byok ? BYOK_RATE_PER_MINUTE : RATE_PER_MINUTE;
-  const dayLimit = byok ? BYOK_RATE_PER_DAY : RATE_PER_DAY;
+  const { minuteLimit, dayLimit } = analysisLimits(byok);
 
   const durable = env?.RATE_LIMITER_DO;
   if (durable && typeof durable.idFromName === 'function') {

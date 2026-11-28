@@ -1,8 +1,8 @@
 import { clientIp, errorResponse, json, readJsonWithLimit, requireSameOriginJson } from '../shared/http.js';
+import { VALIDATE_RATE_PER_MINUTE } from '../shared/limits.js';
 
 const TIMEOUT_MS = 10_000;
 const MAX_BODY_BYTES = 4096;
-const RATE_PER_MINUTE = 10;
 const localBuckets = new Map();
 
 async function isRateLimited(request, env) {
@@ -14,7 +14,7 @@ async function isRateLimited(request, env) {
     try {
       const count = Number(await kv.get(key) || 0) + 1;
       await kv.put(key, String(count), { expirationTtl: 60 });
-      return count > RATE_PER_MINUTE;
+      return count > VALIDATE_RATE_PER_MINUTE;
     } catch {
       throw new Error('RATE_LIMIT_STORAGE_UNAVAILABLE');
     }
@@ -26,7 +26,7 @@ async function isRateLimited(request, env) {
   }
   bucket.count += 1;
   localBuckets.set(ip, bucket);
-  return bucket.count > RATE_PER_MINUTE;
+  return bucket.count > VALIDATE_RATE_PER_MINUTE;
 }
 
 export async function onRequestPost({ request, env }) {

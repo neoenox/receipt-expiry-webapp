@@ -81,6 +81,7 @@ flowchart LR
 |---|---|---|
 | `jstDate` / `shouldSendAtHour` | Round 1 で `functions/shared/schedule.js` に一本化。`public/js/features2.js` の定義は削除済み | 解決（ADR-003） |
 | 通知時刻の再送抑止 | `schedule.js:18` が同一 JST 日・同一時刻の再実行を抑止。`sendReminders` 経由の実経路テストを追加 | 解決（Round 1） |
+| レート制限ポリシー | Round 2 で `functions/shared/limits.js` に一本化。解析 DO / Pages / OCI / 購読 / キー検証が同一値を参照 | 解決（ADR-004） |
 | `daysUntilDate` | `reminder.js:22-24`, `subscribe.js:47-48`, `dates.js:28-35` | 後者はローカル日付で意味が異なる。要契約確認 |
 | `DATE_PATTERN` | `analyze.js:75`, `subscribe.js:4`, `reminder.js:4`, `dates.js:1` | 共有化候補 |
 | エラー/レスポンス | `shared/http.js:3-16` があるが `config.js:6-8`, `push/config.js:3-4`, `oci/server.js:79-82,216` が自作 | 共通化候補 |

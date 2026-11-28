@@ -59,11 +59,6 @@ export function cropRect(width, height, crop, rotation = 0) {
 }
 
 
-/** 購読登録の滥用を防ぐための上限判定。 */
-export function isSubscriptionRateLimited(count, total, maxPerHour = 10, maxTotal = 1000) {
-  return (Number(count) || 0) > maxPerHour || (Number(total) || 0) >= maxTotal;
-}
-
 /** 429 の Retry-After（秒）を上限付きの待機ミリ秒へ変換する。 */
 export function retryDelayMs(status, retryAfter, maxMs = 5000) {
   if (status !== 429) return 0;
