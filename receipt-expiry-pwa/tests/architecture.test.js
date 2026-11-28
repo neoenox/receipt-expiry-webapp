@@ -67,3 +67,15 @@ test('rate policy constants and subscription limit have a single declaration', (
   );
   assert.deepEqual(definitionOwners('isSubscriptionRateLimited'), ['functions/shared/limits.js']);
 });
+
+test('shared browser helpers have a single definition', () => {
+  assert.deepEqual(definitionOwners('newId'), ['public/js/ids.js']);
+  assert.deepEqual(definitionOwners('loadImageElement'), ['public/js/imageProcessor.js']);
+});
+
+test('service worker precaches every browser module', () => {
+  const sw = read(path.join(ROOT, 'public/sw.js'));
+  const precached = new Set([...sw.matchAll(/'(\/js\/[^']+\.js)'/g)].map((match) => match[1]));
+  const modules = walk(path.join(ROOT, 'public/js')).map((file) => `/js/${path.basename(file)}`);
+  assert.deepEqual(modules.filter((module) => !precached.has(module)), []);
+});

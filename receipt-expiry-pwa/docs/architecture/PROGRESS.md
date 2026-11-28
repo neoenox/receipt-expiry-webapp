@@ -42,8 +42,9 @@
 | 2 | レート制限ポリシーの単一化 | `cd4c62d` | unit 61 pass / E2E 45 pass + 既知 flake 1 / Wrangler dry-run / 独立レビュー済み |
 | 3 | アーキテクチャ規範の CI 強制 | `e71daec` | unit 64 pass / E2E 45 pass + 既知 flake 1 / 違反検出の実証 / 独立レビュー済み |
 | 4 | 未配線の通知 Worker 削除と仕様同期 | `8bd9775` | unit 64 pass / E2E 45 pass + 既知 flake 1 / 独立レビュー済み |
-| 5 | 通知設定の購読状態 split（既知 flake 解消） | 同コミット | unit 64 pass / E2E 46 pass / 通知関連4テスト / 実画面確認 / 独立レビュー2回 |
+| 5 | 通知設定の購読状態 split（既知 flake 解消） | `e1630b5` | unit 64 pass / E2E 46 pass / 実画面確認 / 独立レビュー2回 |
+| 6 | ID生成・画像読込・キュー上限の集約 | 同コミット | unit 68 pass / E2E 46 pass / 独立レビュー済み |
 
 ## 既知の flakes
 
-- Round 1〜4 で観測された `notify status warns when getSubscription returns null after enabling` は Round 5 で解消。変更前ベースラインでも再現していたが、設定再オープン時のローカル購読再検証と 410 状態の分離により全 E2E が 46/46 通過した。
+- Round 1〜4 で観測された通知 flake は Round 5 で解消済み。全 E2E が 46/46 通過している。

@@ -1,3 +1,5 @@
+import { newId } from './ids.js';
+
 const DB_NAME = 'ReceiptExpiryDB';
 const DB_VERSION = 6;
 const STORE = {
@@ -86,12 +88,6 @@ function withStore(mode, callback, storeName = STORE.items) {
   }));
 }
 
-function newId() {
-  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
-    return crypto.randomUUID();
-  }
-  return `id-${Date.now()}-${Math.random().toString(16).slice(2)}`;
-}
 
 /* ---------- 在庫 ---------- */
 
@@ -99,7 +95,7 @@ export function addItemsBulk(items) {
   const now = Date.now();
   return withStore('readwrite', (store) => {
     for (const [index, item] of items.entries()) {
-      store.put({ ...item, id: newId(), createdAt: now + index });
+      store.put({ ...item, id: newId('id'), createdAt: now + index });
     }
   });
 }

@@ -92,7 +92,7 @@ function describeImageError(error) {
     : '画像を読み込めませんでした。別の画像をお試しください。';
 }
 
-function loadImageElement(file) {
+export function loadImageElement(file) {
   return new Promise((resolve, reject) => {
     const url = URL.createObjectURL(file);
     const image = new Image();

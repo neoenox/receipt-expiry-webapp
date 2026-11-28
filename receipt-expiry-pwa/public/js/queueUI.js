@@ -1,5 +1,5 @@
 import { listQueuedAnalyses, updateQueuedAnalysis, deleteQueuedAnalysis } from './db.js';
-import { nextAttempt, shouldDiscard } from './queue.js';
+import { nextAttempt, shouldDiscard, MAX_QUEUE_ATTEMPTS } from './queue.js';
 export function createQueueUI({ ui, state, showToast, submitAnalysis }) {
   function renderQueueList(jobs) {
     ui.queueList.replaceChildren();
@@ -9,7 +9,7 @@ export function createQueueUI({ ui, state, showToast, submitAnalysis }) {
       const info = document.createElement('span');
       info.className = 'queue-row-info';
       const created = new Date(job.createdAt || Date.now()).toLocaleString('ja-JP');
-      info.textContent = `${created} ／ 試行 ${Number(job.attempts) || 0}/3`;
+      info.textContent = `${created} ／ 試行 ${Number(job.attempts) || 0}/${MAX_QUEUE_ATTEMPTS}`;
       const actions = document.createElement('span');
       actions.className = 'queue-row-actions';
       for (const [action, label] of [['retry', '再試行'], ['delete', '削除']]) {
